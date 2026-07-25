@@ -24,6 +24,7 @@ import design.pulse.ui.components.SectionHeader
 fun HomeScreen(
     onCapture: () -> Unit = {},
     onReview: () -> Unit = {},
+    onItems: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -60,6 +61,12 @@ fun HomeScreen(
             PulseButton(
                 text = "Review",
                 onClick = onReview,
+                tonal = true,
+                modifier = Modifier.weight(1f),
+            )
+            PulseButton(
+                text = "Registry",
+                onClick = onItems,
                 tonal = true,
                 modifier = Modifier.weight(1f),
             )

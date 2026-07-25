@@ -138,6 +138,13 @@ private fun DraftCard(
             item.title ?: "Unidentified item",
             style = MaterialTheme.typography.titleMedium,
         )
+        if (item.templateId != null) {
+            Text(
+                "FROM TEMPLATE — this model sold before; proven copy pre-filled.",
+                style = MaterialTheme.typography.labelSmall,
+                color = CrateTheme.colors.provenance.base,
+            )
+        }
         val subtitle = listOfNotNull(item.brand, item.model, item.condition?.replace('_', ' '))
             .joinToString(" · ")
         if (subtitle.isNotBlank()) {

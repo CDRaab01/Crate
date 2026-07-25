@@ -45,6 +45,15 @@ data class ScanAcceptedDto(
 )
 
 @Serializable
+data class PriceEventDto(
+    val id: String,
+    @SerialName("old_price") val oldPrice: String,
+    @SerialName("new_price") val newPrice: String,
+    val reason: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
 data class ItemUpdateRequest(
     val title: String? = null,
     val description: String? = null,

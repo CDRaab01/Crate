@@ -17,9 +17,12 @@ class ScreenRoutesTest {
     fun `routes are stable non-blank lowercase tokens`() {
         Screen.all.forEach { screen ->
             assertTrue(screen.route.isNotBlank(), "blank route on $screen")
+            // Nav-arg placeholders like {itemId} are camelCase by convention; the static
+            // path segments stay lowercase.
+            val staticPart = screen.route.replace(Regex("\\{[^}]+\\}"), "")
             assertEquals(
-                screen.route,
-                screen.route.lowercase(),
+                staticPart,
+                staticPart.lowercase(),
                 "route should be lowercase: ${screen.route}",
             )
         }

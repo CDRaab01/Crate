@@ -36,4 +36,7 @@ interface ApiService {
 
     @DELETE("items/{id}")
     suspend fun deleteItem(@Path("id") id: String)
+
+    @GET("items/{id}/price-events")
+    suspend fun priceEvents(@Path("id") id: String): List<PriceEventDto>
 }

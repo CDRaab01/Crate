@@ -7,9 +7,15 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Capture : Screen("capture")
     data object Review : Screen("review")
+    data object Items : Screen("items")
+
+    data object ItemDetail : Screen("items/{itemId}") {
+        const val ARG = "itemId"
+        fun withId(id: String) = "items/$id"
+    }
 
     companion object {
         /** Every route, for the uniqueness guard test. */
-        val all: List<Screen> = listOf(Gate, Login, Home, Capture, Review)
+        val all: List<Screen> = listOf(Gate, Login, Home, Capture, Review, Items, ItemDetail)
     }
 }
