@@ -39,3 +39,26 @@ async def setup_tables():
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest_asyncio.fixture
+async def auth_client(client):
+    """HTTP client pre-authenticated as a fresh unique test user.
+
+    SSO-only app: there is no register endpoint, so the user row is created directly and a
+    session token minted with the app's own signer — exactly what /auth/suite would do."""
+    import uuid
+
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+    from app.security import create_access_token
+
+    async with AsyncSessionLocal() as db:
+        user = User(name="Test Seller", email=f"test_{uuid.uuid4().hex[:8]}@crate.test")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    client.headers["Authorization"] = f"Bearer {create_access_token(str(user.id))}"
+    client.user_id = user.id
+    return client

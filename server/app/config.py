@@ -40,5 +40,21 @@ class Settings(BaseSettings):
 
     external_timeout_seconds: float = 8.0
 
+    # LM Studio vision (item identification + condition + weight/dims estimate). The base URL
+    # and model are pinned in compose `environment:` in production — inside the container
+    # localhost is the container, so the default below only works for bare-metal local dev.
+    lm_studio_base_url: str = "http://localhost:1234/v1"
+    lm_studio_vision_model: str = "google/gemma-4-e4b"
+    lm_studio_timeout: float = 60.0
+
+    # Item photos: binaries on a volume, paths in the DB. 8 MB cap matches the client's
+    # ≤1600px JPEG downscale contract.
+    photos_dir: str = "/data/photos"
+    photo_max_bytes: int = 8 * 1024 * 1024
+
+    # rembg background removal (local U2-Net, CPU). Disabled ⇒ Pillow-only cleanup — the
+    # pipeline degrades, never blocks on it.
+    background_removal_enabled: bool = True
+
 
 settings = Settings()

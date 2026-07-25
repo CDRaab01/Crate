@@ -24,6 +24,11 @@ class Item(Base):
     # the vision pipeline fills these in and the user confirms at review time.
     title: Mapped[str | None] = mapped_column(String(80), nullable=True)  # eBay title cap
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Brand/model feed the duplicate-template signature (Phase 3) and item specifics; kept as
+    # columns (an addition over the CLAUDE.md §4 sketch, flagged in ARCHITECTURE.md) because
+    # template creation at sale time needs them long after the vision draft is gone.
+    brand: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
     category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # eBay category
     condition: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft")
@@ -51,6 +56,12 @@ class Item(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Scan-pipeline state: NULL processed_at = identification still running (or dead — see
+    # scan_error). The review stack polls until this is set.
+    processed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scan_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     photos = relationship(
         "ItemPhoto",
@@ -79,3 +90,8 @@ class ItemPhoto(Base):
     )
 
     item = relationship("Item", back_populates="photos", lazy="raise")
+
+    @property
+    def cleaned(self) -> bool:
+        """Schema-facing flag: has the cleanup pass produced output for this photo yet?"""
+        return self.cleaned_path is not None

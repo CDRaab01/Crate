@@ -20,6 +20,8 @@ dependencies = [
     "greenlet==3.5.3",
     "slowapi==0.1.10",
     "email-validator==2.3.0",
+    "pillow==12.3.0",
+    "rembg[cpu]==2.0.77",
 ]
 
 [project.optional-dependencies]

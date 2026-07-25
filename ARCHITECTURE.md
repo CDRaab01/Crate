@@ -89,6 +89,28 @@ the pair; `GET /users/me` is the authenticated identity read. Everything lives i
 `scripts/synthetic_smoke.py` is the deploy gate: dragonfly-id `/smoke/token`
 (crate-smoke credential) → `/auth/suite` → `/users/me`.
 
+## Capture pipeline (Phase 2, as built — server half)
+
+`POST /items/scan` (20/min, multipart, 1-8 photos of ONE item, JPEG/PNG/WebP, 8 MB cap)
+creates the draft + photo rows immediately (202) and hands the id to a background task;
+the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeline
+(`services/scan_pipeline.py`, own DB session, CPU work on threads):
+
+1. **Cleanup** (`services/cleanup.py`): rembg U2-Net background removal → white
+   replacement → crop-to-subject (+6% margin) → 1% autocontrast → PNG on the photos
+   volume. rembg missing/failed/disabled ⇒ Pillow-only pass — cleanup never blocks a
+   draft. U2-Net weights are baked into the Docker image.
+2. **Identify** (`services/ai/vision.py` + `identify_prompts.py`): up to 3 cleaned photos
+   → LM Studio (strict-JSON prompt, fence-strip + widest-object-span salvage, condition
+   normalized to the enum, weight/dims bounds-checked, title clamped to eBay's 80).
+   Content failure ⇒ low-confidence empty draft (`scan_error="low_confidence"`);
+   transport failure ⇒ `scan_error="identify_unavailable: …"` — the draft always
+   survives with its photos.
+
+Review surface: `GET /items[?status_filter=]`, `PATCH /items/{id}` (suite clearing
+convention: omitted = untouched, "" = clear), `DELETE /items/{id}` (draft/delisted only —
+live listings must be delisted first). All owner-scoped.
+
 ## Data model (migration 0001 — the full CLAUDE.md §4 schema)
 
 - `users` — id, email (unique), name, created_at. No password hash (SSO-only).
@@ -96,6 +118,9 @@ the pair; `GET /users/me` is the authenticated identity read. Everything lives i
   photos), status `draft|active|sold|shipped|returned|delisted` (transitions live in the
   item service only), two computed prices + chosen_price, eBay listing/offer ids,
   weight/dims estimate + weight_confirmed, template_id → duplicate_templates.
+  Migration `0002` adds `brand`/`model` (they feed the Phase 3 template signature and must
+  outlive the vision draft — an addition over the CLAUDE.md §4 sketch) and
+  `processed_at`/`scan_error` (async scan-pipeline state).
 - `item_photos` — ordered per item; original_path/cleaned_path on the photos volume
   (DB stores paths only), ebay_url after EPS upload. Cascade with the item.
 - `sales` — one per eBay order (ebay_order_id unique): price/fees/date/buyer + address
