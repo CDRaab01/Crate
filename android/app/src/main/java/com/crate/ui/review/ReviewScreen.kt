@@ -121,154 +121,163 @@ internal fun DraftCard(
     var posting by remember { mutableStateOf(false) }
 
     PanelCard {
-        if (item.photos.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(item.photos, key = { it.id }) { photo ->
-                    AsyncImage(
-                        model = photoUrl(item.id, photo.id),
-                        contentDescription = "item photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                    )
-                }
-            }
-            Spacer(Modifier.size(8.dp))
-        }
-
-        if (item.processedAt == null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(
-                    color = CrateTheme.colors.attention.base,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.size(8.dp))
-                Text("Identifying…", style = MaterialTheme.typography.bodySmall)
-            }
-            return@PanelCard
-        }
-
-        Text(
-            item.title ?: "Unidentified item",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        if (item.templateId != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelDot(color = CrateTheme.colors.provenance.base)
-                Spacer(Modifier.size(6.dp))
-                Text(
-                    "From template — this model sold before",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CrateTheme.colors.provenance.base,
-                )
-            }
-        }
-        val subtitle = listOfNotNull(item.brand, item.model, item.condition?.replace('_', ' '))
-            .joinToString(" · ")
-        if (subtitle.isNotBlank()) {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
-        }
-        item.description?.let {
-            Spacer(Modifier.size(4.dp))
-            Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 4)
-        }
-        item.scanError?.let { error ->
-            Spacer(Modifier.size(4.dp))
-            Text(
-                when {
-                    error == "low_confidence" -> "Low-confidence identification — check everything."
-                    error.startsWith("identify_unavailable") -> "Identification unavailable ($error)"
-                    else -> error
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = CrateTheme.colors.attention.base,
-            )
-        }
-
-        if (item.quickSalePrice != null || item.patientPrice != null) {
-            Spacer(Modifier.size(8.dp))
-            Caption(text = "Pick a price strategy (live-market prices)")
-            Spacer(Modifier.size(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item.quickSalePrice?.let { price ->
-                    PulseSelectableCard(
-                        label = "Quick · $$price",
-                        selected = item.chosenPrice == price,
-                        onClick = { onChoosePrice(price) },
-                        channel = CrateTheme.colors.pricing.base,
-                        channelDim = CrateTheme.colors.pricing.dim,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                item.patientPrice?.let { price ->
-                    PulseSelectableCard(
-                        label = "Patient · $$price",
-                        selected = item.chosenPrice == price,
-                        onClick = { onChoosePrice(price) },
-                        channel = CrateTheme.colors.pricing.base,
-                        channelDim = CrateTheme.colors.pricing.dim,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            PulseButton(
-                text = "Custom price…",
-                onClick = { customPrice = true },
-                compact = true,
-                tonal = true,
-            )
-        } else {
-            Text(
-                "No market comps yet — link eBay in Settings, or set your own price.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PulseButton(
-                text = "Custom price…",
-                onClick = { customPrice = true },
-                compact = true,
-                tonal = true,
-            )
-        }
-
-        Spacer(Modifier.size(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // The money-adjacent tap: only ever explicit, never automated (house rule).
-            PulseButton(
-                text = if (posting) "Posting…" else "Post to eBay",
-                onClick = {
-                    posting = true
-                    postError = null
-                    onPost { error ->
-                        posting = false
-                        postError = error
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (item.photos.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(item.photos, key = { it.id }) { photo ->
+                        AsyncImage(
+                            model = photoUrl(item.id, photo.id),
+                            contentDescription = "item photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                        )
                     }
-                },
-                enabled = !posting && item.title != null && item.chosenPrice != null,
-                gradient = if (!posting && item.title != null && item.chosenPrice != null) {
-                    CrateTheme.colors.heroGradient
+                }
+            }
+
+            if (item.processedAt == null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        color = CrateTheme.colors.attention.base,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text("Identifying…", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        item.title ?: "Unidentified item",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (item.templateId != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ChannelDot(color = CrateTheme.colors.provenance.base)
+                            Spacer(Modifier.size(6.dp))
+                            Text(
+                                "From template — this model sold before",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CrateTheme.colors.provenance.base,
+                            )
+                        }
+                    }
+                    val subtitle = listOfNotNull(
+                        item.brand,
+                        item.model,
+                        item.condition?.replace('_', ' '),
+                    ).joinToString(" · ")
+                    if (subtitle.isNotBlank()) {
+                        Text(subtitle, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                item.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 4)
+                }
+                item.scanError?.let { error ->
+                    Text(
+                        when {
+                            error == "low_confidence" ->
+                                "Low-confidence identification — check everything."
+                            error.startsWith("identify_unavailable") ->
+                                "Identification unavailable ($error)"
+                            else -> error
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CrateTheme.colors.attention.base,
+                    )
+                }
+
+                Spacer(Modifier.size(4.dp))
+                if (item.quickSalePrice != null || item.patientPrice != null) {
+                    Caption(text = "Pick a price strategy (live-market prices)")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item.quickSalePrice?.let { price ->
+                            PulseSelectableCard(
+                                label = "Quick · $$price",
+                                selected = item.chosenPrice == price,
+                                onClick = { onChoosePrice(price) },
+                                channel = CrateTheme.colors.pricing.base,
+                                channelDim = CrateTheme.colors.pricing.dim,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        item.patientPrice?.let { price ->
+                            PulseSelectableCard(
+                                label = "Patient · $$price",
+                                selected = item.chosenPrice == price,
+                                onClick = { onChoosePrice(price) },
+                                channel = CrateTheme.colors.pricing.base,
+                                channelDim = CrateTheme.colors.pricing.dim,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    PulseButton(
+                        text = "Custom price…",
+                        onClick = { customPrice = true },
+                        compact = true,
+                        tonal = true,
+                    )
                 } else {
-                    null
-                },
-                compact = true,
-            )
-            PulseButton(text = "Edit", onClick = { editing = true }, compact = true, tonal = true)
-            PulseButton(text = "Dismiss", onClick = onDismiss, compact = true, tonal = true)
-        }
-        if (item.chosenPrice == null) {
-            Text(
-                "Pick a price to enable posting.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        postError?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-            )
+                    Text(
+                        "No market comps yet — link eBay in Settings, or set your own price.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    PulseButton(
+                        text = "Custom price…",
+                        onClick = { customPrice = true },
+                        compact = true,
+                        tonal = true,
+                    )
+                }
+
+                Spacer(Modifier.size(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // The money-adjacent tap: only ever explicit, never automated (house rule).
+                    PulseButton(
+                        text = if (posting) "Posting…" else "Post to eBay",
+                        onClick = {
+                            posting = true
+                            postError = null
+                            onPost { error ->
+                                posting = false
+                                postError = error
+                            }
+                        },
+                        enabled = !posting && item.title != null && item.chosenPrice != null,
+                        gradient = if (!posting && item.title != null && item.chosenPrice != null) {
+                            CrateTheme.colors.heroGradient
+                        } else {
+                            null
+                        },
+                        compact = true,
+                    )
+                    PulseButton(
+                        text = "Edit",
+                        onClick = { editing = true },
+                        compact = true,
+                        tonal = true,
+                    )
+                    PulseButton(text = "Dismiss", onClick = onDismiss, compact = true, tonal = true)
+                }
+                if (item.chosenPrice == null) {
+                    Text(
+                        "Pick a price to enable posting.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                postError?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
         }
     }
 

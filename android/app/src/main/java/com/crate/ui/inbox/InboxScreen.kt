@@ -91,35 +91,37 @@ internal fun MessageCard(
         CrateTheme.colors.attention.base
     }
     PanelCard(channel = if (!message.resolved) CrateTheme.colors.attention.base else null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ChannelDot(color = typeColor)
-            Spacer(Modifier.size(6.dp))
-            Text(
-                message.messageType.replace('_', ' ').uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = typeColor,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                message.flaggedAt.take(10),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(message.content, style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!message.resolved) {
-                PulseButton(
-                    text = "Mark resolved",
-                    onClick = onResolve,
-                    compact = true,
-                )
-            } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelDot(color = typeColor)
+                Spacer(Modifier.size(6.dp))
                 Text(
-                    "RESOLVED",
+                    message.messageType.replace('_', ' ').uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = CrateTheme.colors.sold.base,
+                    color = typeColor,
+                    modifier = Modifier.weight(1f),
                 )
+                Text(
+                    message.flaggedAt.take(10),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(message.content, style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!message.resolved) {
+                    PulseButton(
+                        text = "Mark resolved",
+                        onClick = onResolve,
+                        compact = true,
+                    )
+                } else {
+                    Text(
+                        "RESOLVED",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CrateTheme.colors.sold.base,
+                    )
+                }
             }
         }
     }

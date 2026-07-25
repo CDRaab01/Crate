@@ -463,3 +463,8 @@ additive `HomeViewModel` + `SettingsViewModel.user` (both on existing endpoints)
   copy; Settings gained the missing `verticalScroll` (overflow bug).
 - **Verified:** `:app:testDebugUnitTest` green (33 tests incl. new `HomeViewModelTest`);
   Roborazzi baselines re-recorded — 16 PNGs (adds settings + shell scenes).
+- **Spacing pass (same day, from on-device review):** Pulse's `PanelCard` lays out content
+  with a zero-gap Column by design, so every stacked card interior now supplies its own
+  rhythm — 8dp between related lines, ~12dp before section transitions, 4dp title/badge
+  grouping (DraftCard, MessageCard, Detail panels, WeightConfirmCard/LabelBought, Settings
+  cards). Baselines re-recorded again.

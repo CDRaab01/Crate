@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.crate.BuildConfig
 import com.crate.ui.auth.AuthViewModel
@@ -112,48 +115,52 @@ fun SettingsScreen(
                     }
                     is UiState.Success -> PanelCard {
                         val s = state.data
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            ChannelDot(
-                                color = if (s.connected) {
-                                    CrateTheme.colors.sold.base
-                                } else {
-                                    CrateTheme.colors.attention.base
-                                },
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ChannelDot(
+                                    color = if (s.connected) {
+                                        CrateTheme.colors.sold.base
+                                    } else {
+                                        CrateTheme.colors.attention.base
+                                    },
+                                )
+                                Text(
+                                    text = when {
+                                        !s.configured -> "  Not connected"
+                                        s.connected -> "  Connected (${s.environment})"
+                                        else -> "  Ready to connect"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                            }
                             Text(
-                                text = when {
-                                    !s.configured -> "  Not connected"
-                                    s.connected -> "  Connected (${s.environment})"
-                                    else -> "  Ready to connect"
+                                when {
+                                    !s.configured -> "eBay isn't set up on the server yet. " +
+                                        "Pricing and posting switch on once it's connected."
+                                    s.connected -> "Renews automatically — access expires " +
+                                        "${s.refreshExpiresAt?.take(10) ?: "—"}."
+                                    else -> "Link your seller account to enable pricing " +
+                                        "and posting."
                                 },
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
-                        Text(
-                            when {
-                                !s.configured -> "eBay isn't set up on the server yet. Pricing " +
-                                    "and posting switch on once it's connected."
-                                s.connected -> "Renews automatically — access expires " +
-                                    "${s.refreshExpiresAt?.take(10) ?: "—"}."
-                                else -> "Link your seller account to enable pricing and posting."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (s.configured && !s.connected) {
+                            if (s.configured && !s.connected) {
+                                Spacer(Modifier.size(4.dp))
+                                PulseButton(
+                                    text = "Connect eBay",
+                                    onClick = { viewModel.startConnect() },
+                                    gradient = CrateTheme.colors.heroGradient,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                             PulseButton(
-                                text = "Connect eBay",
-                                onClick = { viewModel.startConnect() },
-                                gradient = CrateTheme.colors.heroGradient,
-                                modifier = Modifier.fillMaxWidth(),
+                                text = "Refresh status",
+                                onClick = { viewModel.refresh() },
+                                tonal = true,
+                                compact = true,
                             )
                         }
-                        PulseButton(
-                            text = "Refresh status",
-                            onClick = { viewModel.refresh() },
-                            tonal = true,
-                            compact = true,
-                        )
                     }
                 }
             }
@@ -200,8 +207,12 @@ internal fun DropPolicyCard(
     var fastest by remember(preference) { mutableStateOf(preference == "fastest") }
 
     PanelCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text("Automatic price drops", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Unsold listings drop $step% every $interval days, never below your " +
@@ -210,6 +221,7 @@ internal fun DropPolicyCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Spacer(Modifier.size(12.dp))
             Switch(checked = dropsOn, onCheckedChange = { dropsOn = it })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
@@ -246,5 +258,6 @@ internal fun DropPolicyCard(
             enabled = interval.toIntOrNull() != null && step.toDoubleOrNull() != null,
             compact = true,
         )
+        }
     }
 }

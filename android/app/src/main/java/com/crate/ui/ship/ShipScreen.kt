@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -209,6 +210,7 @@ internal fun WeightConfirmCard(
 
     SectionHeader(label = "Confirm weight & size", channel = CrateTheme.colors.attention.base)
     PanelCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             if (item.weightConfirmed) {
                 "Confirmed — edit and re-confirm if the box changed."
@@ -259,6 +261,7 @@ internal fun WeightConfirmCard(
             enabled = weight.isNotBlank() && l.isNotBlank() && w.isNotBlank() && h.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
         )
+        }
     }
 }
 
@@ -270,12 +273,14 @@ internal fun LabelBought(
 ) {
     SectionHeader(label = "Label bought", channel = CrateTheme.colors.sold.base)
     PanelCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Tracking: $tracking", style = MaterialTheme.typography.bodyMedium)
         Text(
             "Tracking was pushed to the eBay order. Print the label, box it up, done.",
             style = MaterialTheme.typography.bodySmall,
         )
         labelUrl?.let { url ->
+            Spacer(Modifier.size(4.dp))
             PulseButton(
                 text = "Open label PDF",
                 onClick = { onOpen(url) },
@@ -289,6 +294,7 @@ internal fun LabelBought(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
         }
     }
 }

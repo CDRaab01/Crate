@@ -165,45 +165,49 @@ internal fun Detail(
 
         SectionHeader(label = "Pricing", channel = CrateTheme.colors.pricing.base)
         PanelCard {
-            PriceLine("Quick sale", item.quickSalePrice)
-            PriceLine("Patient", item.patientPrice)
-            PriceLine("Chosen", item.chosenPrice)
-            if (item.quickSalePrice == null && item.patientPrice == null) {
-                Text(
-                    "Pricing appears once your eBay account is linked in Settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                PriceLine("Quick sale", item.quickSalePrice)
+                PriceLine("Patient", item.patientPrice)
+                PriceLine("Chosen", item.chosenPrice)
+                if (item.quickSalePrice == null && item.patientPrice == null) {
+                    Text(
+                        "Pricing appears once your eBay account is linked in Settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
         if (priceEvents.isNotEmpty()) {
             SectionHeader(label = "Price history", channel = CrateTheme.colors.pricing.base)
             PanelCard {
-                if (priceEvents.size >= 3) {
-                    val points = (listOf(priceEvents.first().oldPrice) +
-                        priceEvents.map { it.newPrice })
-                        .mapNotNull { it.toFloatOrNull() }
-                    if (points.size >= 2) {
-                        Sparkline(
-                            values = points,
-                            channel = CrateTheme.colors.pricing.base,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (priceEvents.size >= 3) {
+                        val points = (listOf(priceEvents.first().oldPrice) +
+                            priceEvents.map { it.newPrice })
+                            .mapNotNull { it.toFloatOrNull() }
+                        if (points.size >= 2) {
+                            Sparkline(
+                                values = points,
+                                channel = CrateTheme.colors.pricing.base,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
-                }
-                priceEvents.forEach { event ->
-                    Row {
-                        Text(
-                            "$${event.oldPrice} → $${event.newPrice}",
-                            style = CrateTheme.dataType.numeral,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            event.reason.replace('_', ' '),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = CrateTheme.colors.attention.base,
-                        )
+                    priceEvents.forEach { event ->
+                        Row {
+                            Text(
+                                "$${event.oldPrice} → $${event.newPrice}",
+                                style = CrateTheme.dataType.numeral,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                event.reason.replace('_', ' '),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CrateTheme.colors.attention.base,
+                            )
+                        }
                     }
                 }
             }
@@ -212,70 +216,75 @@ internal fun Detail(
         if (sale != null) {
             SectionHeader(label = "Sale", channel = CrateTheme.colors.sold.base)
             PanelCard {
-                Text(
-                    "Sold to ${sale.buyerUsername} for $${sale.salePrice}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    "Ship status: ${sale.shipStatus.replace('_', ' ')}" +
-                        (sale.trackingNumber?.let { "  ·  $it" } ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                sale.buyerAddress?.let { address ->
-                    val readable = address.values.joinToString(", ") { value ->
-                        (value as? JsonPrimitive)?.content ?: value.toString()
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        readable,
+                        "Sold to ${sale.buyerUsername} for $${sale.salePrice}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Ship status: ${sale.shipStatus.replace('_', ' ')}" +
+                            (sale.trackingNumber?.let { "  ·  $it" } ?: ""),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                if (item.status == "sold") {
-                    PulseButton(
-                        text = "Ship it",
-                        onClick = { onShip(item.id) },
-                        gradient = CrateTheme.colors.heroGradient,
-                        leadingIcon = {
-                            Icon(
-                                Icons.Outlined.LocalShipping,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    sale.buyerAddress?.let { address ->
+                        val readable = address.values.joinToString(", ") { value ->
+                            (value as? JsonPrimitive)?.content ?: value.toString()
+                        }
+                        Text(
+                            readable,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (item.status == "sold") {
+                        Spacer(Modifier.size(4.dp))
+                        PulseButton(
+                            text = "Ship it",
+                            onClick = { onShip(item.id) },
+                            gradient = CrateTheme.colors.heroGradient,
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.LocalShipping,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
 
         SectionHeader(label = "Shipping estimate", channel = CrateTheme.colors.copper.base)
         PanelCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Outlined.Scale,
-                    contentDescription = null,
-                    tint = CrateTheme.colors.copper.base,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.size(10.dp))
-                Text(
-                    buildString {
-                        append(item.weightOzEst?.let { "$it oz" } ?: "No weight estimate")
-                        item.dimsInEst?.let { d ->
-                            append("  ·  ${d["l"]}×${d["w"]}×${d["h"]} in")
-                        }
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            if (!item.weightConfirmed) {
-                Text(
-                    "You'll confirm the packed weight at ship time.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Scale,
+                        contentDescription = null,
+                        tint = CrateTheme.colors.copper.base,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Text(
+                        buildString {
+                            append(item.weightOzEst?.let { "$it oz" } ?: "No weight estimate")
+                            item.dimsInEst?.let { d ->
+                                append("  ·  ${d["l"]}×${d["w"]}×${d["h"]} in")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                if (!item.weightConfirmed) {
+                    Text(
+                        "You'll confirm the packed weight at ship time.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
