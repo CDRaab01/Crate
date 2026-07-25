@@ -21,6 +21,7 @@ from app.database import AsyncSessionLocal
 from app.matching.signature import build_signature
 from app.models.duplicate_template import DuplicateTemplate
 from app.models.item import Item
+from app.pricing.service import price_item
 from app.services import photo_store
 from app.services.ai.vision import data_url, identify_item
 from app.services.cleanup import clean_photo
@@ -86,6 +87,11 @@ async def process_item(item_id: uuid.UUID) -> None:
                         item.description = template.description_template
                     item.category_id = template.category_id or item.category_id
                     item.template_id = template.id
+
+            # Price research (Phase 4): active comps → quick/patient. Best-effort — an
+            # unconfigured keyset or eBay outage means a draft without prices, never a
+            # dead draft (the review UI says so and the user can type a price).
+            await price_item(item)
         except HTTPException as e:
             # Transport failure (LM Studio down/slow/broken): the draft survives with its
             # photos; the review stack shows why identification is missing.

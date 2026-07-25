@@ -17,12 +17,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+import httpx
+
 from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
 from app.models.item import ITEM_STATUSES, Item, ItemPhoto
 from app.models.price_event import PriceEvent
-from app.schemas.item import ItemOut, ItemUpdate, ScanAccepted
+from app.pricing import browse
+from app.pricing import service as pricing_service
+from app.pricing.comps import compute_prices
+from app.schemas.item import CompOut, CompsOut, ItemOut, ItemUpdate, ScanAccepted
 from app.schemas.template import PriceEventOut
 from app.security import CurrentUser
 from app.services import photo_store, scan_pipeline
@@ -141,6 +146,38 @@ async def update_item(
         setattr(item, name if name != "dims_in_est" else "dims_in_est", value)
     await db.commit()
     return await _owned_item(db, user.id, item_id)
+
+
+@router.get("/{item_id}/comps", response_model=CompsOut)
+@limiter.limit("30/minute")
+async def comps(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Live comp evidence for the review screen — ACTIVE-market prices, labeled honestly
+    (sold-comp data is partner-only and not available). 503 until an eBay keyset exists."""
+    if not browse.configured():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "eBay keyset not configured — comp research is unavailable",
+        )
+    item = await _owned_item(db, user.id, item_id)
+    try:
+        found = await pricing_service.fetch_comps(item)
+    except httpx.HTTPError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "eBay comp search failed")
+    suggestion = compute_prices(found)
+    top = sorted(found, key=lambda c: c.price)[:10]
+    return CompsOut(
+        comps=[
+            CompOut(title=c.title, price=c.price, condition=c.condition, url=c.url) for c in top
+        ],
+        quick_sale=suggestion.quick_sale if suggestion else None,
+        patient=suggestion.patient if suggestion else None,
+        comp_count=suggestion.comp_count if suggestion else 0,
+    )
 
 
 @router.get("/{item_id}/price-events", response_model=list[PriceEventOut])

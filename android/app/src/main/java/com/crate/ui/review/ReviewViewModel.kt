@@ -76,6 +76,11 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
+    /** Pick a price strategy (quick/patient/custom) — just chosen_price via the normal PATCH. */
+    fun choosePrice(id: String, price: String, onDone: (Boolean) -> Unit = {}) {
+        saveEdits(id, ItemUpdateRequest(chosenPrice = price), onDone)
+    }
+
     fun dismiss(id: String) {
         viewModelScope.launch {
             try {

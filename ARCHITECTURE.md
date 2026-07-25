@@ -123,6 +123,26 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
 
+## Pricing research (Phase 4, as built)
+
+- `app/pricing/comps.py` — the pure math, the ONLY source of price numbers: IQR (1.5×)
+  outlier trim (skipped under 4 comps), **patient = median of trimmed actives**,
+  **quick-sale = min(cheapest_trimmed × 0.95, patient)**, $1 floor, cent-quantized.
+  Active-market framing is deliberate and labeled in the UI: sold-comp data
+  (Marketplace Insights) is partner-only.
+- `app/pricing/browse.py` — Browse API client on an APPLICATION token
+  (client-credentials, cached; needs no user consent so pricing works the moment a
+  keyset exists, independent of Phase 5 seller OAuth). Sandbox/production host from
+  `ebay_environment`; our condition enum maps to eBay conditionId buckets. Always
+  mocked in CI.
+- `app/pricing/service.py` — orchestration: query = brand+model (falls back to title),
+  `price_item()` is best-effort in the scan pipeline (unconfigured keyset or eBay
+  outage ⇒ a draft without prices, never a dead draft).
+- `GET /items/{id}/comps` (30/min) — live evidence for the review screen (top 10 actives
+  with links + both computed numbers); 503 until a keyset exists, 502 on eBay failure.
+- Client: the review card gains the strategy picker (Quick $x / Patient $y / Custom →
+  `chosen_price` via the normal PATCH) and honest "active-market, not solds" labeling.
+
 ## Registry + duplicate templates (Phase 3, as built — server half)
 
 - `app/matching/signature.py` — the pure signature module: casefolded, deduped,

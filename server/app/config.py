@@ -56,5 +56,12 @@ class Settings(BaseSettings):
     # pipeline degrades, never blocks on it.
     background_removal_enabled: bool = True
 
+    # eBay (always mocked in CI; keyset in server/.env when the developer account exists).
+    # Unset client id/secret ⇒ pricing is silently skipped in the pipeline and /comps 503s.
+    ebay_client_id: str | None = None
+    ebay_client_secret: str | None = None
+    ebay_environment: str = "sandbox"  # sandbox | production
+    ebay_marketplace_id: str = "EBAY_US"
+
 
 settings = Settings()

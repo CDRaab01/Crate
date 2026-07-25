@@ -39,4 +39,7 @@ interface ApiService {
 
     @GET("items/{id}/price-events")
     suspend fun priceEvents(@Path("id") id: String): List<PriceEventDto>
+
+    @GET("items/{id}/comps")
+    suspend fun comps(@Path("id") id: String): CompsDto
 }

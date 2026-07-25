@@ -70,6 +70,22 @@ class ItemUpdate(BaseModel):
         return self.condition
 
 
+class CompOut(BaseModel):
+    title: str
+    price: Decimal
+    condition: str | None
+    url: str | None
+
+
+class CompsOut(BaseModel):
+    """Evidence for the review screen: honest active-market framing, top comps with links."""
+
+    comps: list[CompOut]
+    quick_sale: Decimal | None
+    patient: Decimal | None
+    comp_count: int
+
+
 class ScanAccepted(BaseModel):
     """POST /items/scan response: the draft exists immediately; identification fills in
     asynchronously (poll GET /items/{id} until processed_at is set)."""

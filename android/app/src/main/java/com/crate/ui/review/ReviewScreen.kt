@@ -89,6 +89,7 @@ fun ReviewScreen(
                             item = item,
                             onSave = { update, done -> viewModel.saveEdits(item.id, update, done) },
                             onDismiss = { viewModel.dismiss(item.id) },
+                            onChoosePrice = { price -> viewModel.choosePrice(item.id, price) },
                         )
                     }
                 }
@@ -102,8 +103,10 @@ private fun DraftCard(
     item: ItemDto,
     onSave: (ItemUpdateRequest, (Boolean) -> Unit) -> Unit,
     onDismiss: () -> Unit,
+    onChoosePrice: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var customPrice by remember { mutableStateOf(false) }
 
     PanelCard {
         if (item.photos.isNotEmpty()) {
@@ -167,15 +170,64 @@ private fun DraftCard(
             )
         }
 
+        if (item.quickSalePrice != null || item.patientPrice != null) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                "Active-market prices (not solds) — pick a strategy:",
+                style = MaterialTheme.typography.labelSmall,
+                color = CrateTheme.colors.pricing.base,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item.quickSalePrice?.let { price ->
+                    PulseButton(
+                        text = if (item.chosenPrice == price) "✓ Quick $$price" else "Quick $$price",
+                        onClick = { onChoosePrice(price) },
+                        compact = true,
+                    )
+                }
+                item.patientPrice?.let { price ->
+                    PulseButton(
+                        text = if (item.chosenPrice == price) "✓ Patient $$price" else "Patient $$price",
+                        onClick = { onChoosePrice(price) },
+                        compact = true,
+                        tonal = true,
+                    )
+                }
+                PulseButton(
+                    text = "Custom",
+                    onClick = { customPrice = true },
+                    compact = true,
+                    tonal = true,
+                )
+            }
+        } else {
+            Text(
+                "No comp prices (eBay keyset not connected yet) — set a custom price.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Spacer(Modifier.size(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PulseButton(text = "Edit", onClick = { editing = true }, compact = true)
             PulseButton(text = "Dismiss", onClick = onDismiss, compact = true, tonal = true)
         }
         Text(
-            "Pricing + posting arrive in later phases — nothing goes to eBay yet.",
+            "Posting arrives in Phase 5 — nothing goes to eBay yet.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (customPrice) {
+        CustomPriceDialog(
+            initial = item.chosenPrice ?: item.quickSalePrice ?: "",
+            onSave = { price ->
+                onChoosePrice(price)
+                customPrice = false
+            },
+            onCancel = { customPrice = false },
         )
     }
 
@@ -235,6 +287,32 @@ private fun EditDialog(
                     )
                 )
             }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun CustomPriceDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var value by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Set a price") },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { input -> value = input.filter { it.isDigit() || it == '.' } },
+                label = { Text("USD") },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { value.toDoubleOrNull()?.let { onSave(value) } },
+            ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )

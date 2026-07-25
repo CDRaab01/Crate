@@ -45,6 +45,22 @@ data class ScanAcceptedDto(
 )
 
 @Serializable
+data class CompDto(
+    val title: String,
+    val price: String,
+    val condition: String? = null,
+    val url: String? = null,
+)
+
+@Serializable
+data class CompsDto(
+    val comps: List<CompDto> = emptyList(),
+    @SerialName("quick_sale") val quickSale: String? = null,
+    val patient: String? = null,
+    @SerialName("comp_count") val compCount: Int = 0,
+)
+
+@Serializable
 data class PriceEventDto(
     val id: String,
     @SerialName("old_price") val oldPrice: String,
