@@ -108,8 +108,38 @@ the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeli
    survives with its photos.
 
 Review surface: `GET /items[?status_filter=]`, `PATCH /items/{id}` (suite clearing
-convention: omitted = untouched, "" = clear), `DELETE /items/{id}` (draft/delisted only —
-live listings must be delisted first). All owner-scoped.
+convention: null/omitted = untouched, "" = clear — `exclude_none`, because kotlinx
+clients encode absent fields as explicit nulls), `DELETE /items/{id}` (draft/delisted
+only — live listings must be delisted first), `GET /items/{id}/photos/{pid}/file`
+(authenticated photo binary — cleaned when available), `GET /items/{id}/price-events`.
+All owner-scoped.
+
+**Client half:** camera/gallery shots (downscaled ≤1600px via `util/ImageBytes`) persist
+to `filesDir/capture_queue/{id}/` + a Room row (`capture_queue`), drained by a
+WorkManager `UploadWorker` (CONNECTED constraint, exponential backoff). Drain rules are
+the suite's sync lessons: IOException ⇒ still pending, retry later; HttpException ⇒
+mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
+(`ui/review/`) lists server drafts, re-polls while any is processing, edits via the
+PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
+loads carry auth + the host rewrite.
+
+## Registry + duplicate templates (Phase 3, as built — server half)
+
+- `app/matching/signature.py` — the pure signature module: casefolded, deduped,
+  order-stable brand+model tokens ("rapala f11"). **Deviation from the §4 sketch:
+  category tokens are excluded** — the vision `category_hint` is transient, so a
+  sale-time signature could never reproduce a capture-time one; brand+model is the
+  natural "same lure model sold before" key. No brand AND no model ⇒ no signature ⇒
+  never templated.
+- `app/services/item_lifecycle.py` — the ONE place status transitions live
+  (draft→active→sold→shipped, returned/delisted branches; illegal moves raise).
+  `active` stamps `date_listed`; **`sold` upserts the duplicate template** (proven
+  title/description/category + last price, use_count++), which is exactly when a
+  listing pattern becomes worth reusing.
+- Scan pipeline dup fast-path: after identification, a signature match prefills the
+  draft from the template (template's proven copy wins; identification ran to confirm
+  the match) and sets `template_id` — the client's "from template" badge.
+- `GET /templates` / `DELETE /templates/{id}` (items keep template_id NULL via SET NULL).
 
 ## Data model (migration 0001 — the full CLAUDE.md §4 schema)
 

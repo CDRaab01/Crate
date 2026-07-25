@@ -12,6 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,7 +21,9 @@ from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
 from app.models.item import ITEM_STATUSES, Item, ItemPhoto
+from app.models.price_event import PriceEvent
 from app.schemas.item import ItemOut, ItemUpdate, ScanAccepted
+from app.schemas.template import PriceEventOut
 from app.security import CurrentUser
 from app.services import photo_store, scan_pipeline
 
@@ -126,7 +129,10 @@ async def update_item(
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
 
-    fields = req.model_dump(exclude_unset=True)
+    # Suite PATCH convention: null (or omitted) = untouched, "" = clear. exclude_none —
+    # not exclude_unset — because kotlinx.serialization clients encode absent fields as
+    # explicit nulls.
+    fields = req.model_dump(exclude_none=True)
     for name, value in fields.items():
         if name in ("title", "description", "brand", "model", "category_id") and value == "":
             value = None
@@ -135,6 +141,47 @@ async def update_item(
         setattr(item, name if name != "dims_in_est" else "dims_in_est", value)
     await db.commit()
     return await _owned_item(db, user.id, item_id)
+
+
+@router.get("/{item_id}/price-events", response_model=list[PriceEventOut])
+async def price_events(
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Price history for the detail screen — every drop the scheduler (or the user) made."""
+    await _owned_item(db, user.id, item_id)
+    return (
+        (
+            await db.execute(
+                select(PriceEvent)
+                .where(PriceEvent.item_id == item_id)
+                .order_by(PriceEvent.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+@router.get("/{item_id}/photos/{photo_id}/file")
+async def photo_file(
+    item_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Serve the photo binary (cleaned when available, else the original) — the review
+    stack's image source. Owner-scoped like everything else."""
+    item = await _owned_item(db, user.id, item_id)
+    photo = next((p for p in item.photos if p.id == photo_id), None)
+    if photo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo not found")
+    path = photo.cleaned_path or photo.original_path
+    if not Path(path).is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo file missing")
+    media_type = "image/png" if path.endswith(".png") else "image/jpeg"
+    return FileResponse(path, media_type=media_type)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

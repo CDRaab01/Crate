@@ -18,6 +18,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
+from app.matching.signature import build_signature
+from app.models.duplicate_template import DuplicateTemplate
 from app.models.item import Item
 from app.services import photo_store
 from app.services.ai.vision import data_url, identify_item
@@ -64,6 +66,26 @@ async def process_item(item_id: uuid.UUID) -> None:
             item.dims_in_est = draft.dims_in
             if draft.confidence == "low":
                 item.scan_error = "low_confidence"
+
+            # Duplicate fast-path: a matching template (same brand+model sold before) wins
+            # the sellable copy — identification ran only to confirm the match. The client
+            # badges template_id != null as "from template — previously sold N times".
+            signature = build_signature(item.brand, item.model)
+            if signature is not None:
+                template = (
+                    await db.execute(
+                        select(DuplicateTemplate).where(
+                            DuplicateTemplate.user_id == item.user_id,
+                            DuplicateTemplate.item_signature == signature,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if template is not None:
+                    item.title = template.title_template
+                    if template.description_template:
+                        item.description = template.description_template
+                    item.category_id = template.category_id or item.category_id
+                    item.template_id = template.id
         except HTTPException as e:
             # Transport failure (LM Studio down/slow/broken): the draft survives with its
             # photos; the review stack shows why identification is missing.

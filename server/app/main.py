@@ -7,7 +7,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
-from app.routers import auth, items, suite_auth, users
+from app.routers import auth, items, suite_auth, templates, users
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
@@ -64,6 +64,7 @@ app.include_router(auth.router)
 app.include_router(suite_auth.router)
 app.include_router(users.router)
 app.include_router(items.router)
+app.include_router(templates.router)
 
 
 @app.get("/health", tags=["health"])
