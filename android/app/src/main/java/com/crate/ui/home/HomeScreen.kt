@@ -25,6 +25,7 @@ fun HomeScreen(
     onCapture: () -> Unit = {},
     onReview: () -> Unit = {},
     onItems: () -> Unit = {},
+    onSettings: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -78,5 +79,11 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+        PulseButton(
+            text = "Settings",
+            onClick = onSettings,
+            tonal = true,
+            compact = true,
+        )
     }
 }

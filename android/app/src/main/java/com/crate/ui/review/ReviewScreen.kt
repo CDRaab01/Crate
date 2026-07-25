@@ -90,6 +90,7 @@ fun ReviewScreen(
                             onSave = { update, done -> viewModel.saveEdits(item.id, update, done) },
                             onDismiss = { viewModel.dismiss(item.id) },
                             onChoosePrice = { price -> viewModel.choosePrice(item.id, price) },
+                            onPost = { done -> viewModel.post(item.id, done) },
                         )
                     }
                 }
@@ -104,9 +105,12 @@ private fun DraftCard(
     onSave: (ItemUpdateRequest, (Boolean) -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onChoosePrice: (String) -> Unit,
+    onPost: ((String?) -> Unit) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
     var customPrice by remember { mutableStateOf(false) }
+    var postError by remember { mutableStateOf<String?>(null) }
+    var posting by remember { mutableStateOf(false) }
 
     PanelCard {
         if (item.photos.isNotEmpty()) {
@@ -210,14 +214,37 @@ private fun DraftCard(
 
         Spacer(Modifier.size(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PulseButton(text = "Edit", onClick = { editing = true }, compact = true)
+            // The money-adjacent tap: only ever explicit, never automated (house rule).
+            PulseButton(
+                text = if (posting) "Posting…" else "Post to eBay",
+                onClick = {
+                    posting = true
+                    postError = null
+                    onPost { error ->
+                        posting = false
+                        postError = error
+                    }
+                },
+                enabled = !posting && item.title != null && item.chosenPrice != null,
+                compact = true,
+            )
+            PulseButton(text = "Edit", onClick = { editing = true }, compact = true, tonal = true)
             PulseButton(text = "Dismiss", onClick = onDismiss, compact = true, tonal = true)
         }
-        Text(
-            "Posting arrives in Phase 5 — nothing goes to eBay yet.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (item.chosenPrice == null) {
+            Text(
+                "Pick a price to enable posting.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        postError?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 
     if (customPrice) {

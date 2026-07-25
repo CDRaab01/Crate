@@ -1,0 +1,97 @@
+package com.crate.ui.settings
+
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.crate.ui.auth.AuthViewModel
+import com.crate.ui.theme.CrateTheme
+import com.crate.util.UiState
+import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.PulseButton
+import design.pulse.ui.components.SectionHeader
+
+@Composable
+fun SettingsScreen(
+    onSignedOut: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
+) {
+    val context = LocalContext.current
+    val ebay by viewModel.ebayStatus.collectAsState()
+    val connectUrl by viewModel.connectUrl.collectAsState()
+
+    // The one-time seller consent runs in the browser (redirect lands on the server's
+    // tailnet callback, not in the app).
+    LaunchedEffect(connectUrl) {
+        connectUrl?.let { url ->
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            viewModel.connectUrlConsumed()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(CrateTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
+    ) {
+        SectionHeader(label = "eBay", channel = CrateTheme.colors.copper.base)
+        when (val state = ebay) {
+            is UiState.Loading, UiState.Idle -> PanelCard { Text("Checking connection…") }
+            is UiState.Error -> PanelCard {
+                Text(state.message, color = MaterialTheme.colorScheme.error)
+            }
+            is UiState.Success -> PanelCard {
+                val s = state.data
+                Text(
+                    when {
+                        !s.configured -> "Keyset not configured on the server yet — pricing " +
+                            "and posting stay off until the eBay developer account exists."
+                        s.connected -> "Connected (${s.environment}). Refresh token expires " +
+                            "${s.refreshExpiresAt?.take(10) ?: "—"} (~18-month lifetime; " +
+                            "Crate will warn well before)."
+                        else -> "Keyset configured, seller account not connected."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (state.data.configured && !state.data.connected) {
+                    PulseButton(
+                        text = "Connect eBay (one-time consent)",
+                        onClick = { viewModel.startConnect() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                PulseButton(
+                    text = "Refresh status",
+                    onClick = { viewModel.refresh() },
+                    tonal = true,
+                    compact = true,
+                )
+            }
+        }
+
+        SectionHeader(label = "Account", channel = CrateTheme.colors.attention.base)
+        PulseButton(
+            text = "Sign out",
+            onClick = {
+                authViewModel.signOut()
+                onSignedOut()
+            },
+            tonal = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}

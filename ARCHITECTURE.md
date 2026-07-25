@@ -123,6 +123,30 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
 
+## eBay OAuth + posting (Phase 5, as built — sandbox-ready, mocked in CI)
+
+- **Seller OAuth** (`services/ebay/oauth.py`): GET `/ebay/connect` (auth) returns the
+  consent URL; the browser lands on eBay; eBay redirects to the unauthenticated
+  `/ebay/callback` where a one-time in-process `state` (10-min TTL — single-user app,
+  deliberate) proves the session and the code is exchanged. Tokens persist in
+  `ebay_credentials` **Fernet-encrypted** (`FERNET_KEY` unset ⇒ connect 503s — tokens
+  are never stored plaintext). `user_token()` auto-refreshes within 5 min of expiry and
+  409s with "reconnect" when the ~18-month refresh token is dead; `/ebay/status`
+  surfaces expiry for Settings.
+- **Posting** (`services/ebay/sell.py`, POST `/items/{id}/post` — the explicit approve
+  tap, never unattended): ensure ship-from location → **EPS photo upload via Trading
+  API UploadSiteHostedPictures** (Crate is tailnet-only, eBay can't fetch our URLs, so
+  binaries are pushed; EPS URLs cached on photo rows) → inventory item (sku = item id,
+  Brand/Model aspects, condition mapped to the Inventory enum) → fixed-price offer
+  (business-policy ids from env; 409 with instructions until the one-time seller setup
+  exists) → publish → `ebay_listing_id` stored + lifecycle draft→active.
+  POST `/items/{id}/delist` withdraws the offer (active→delisted).
+  `update_offer_price()` exists for manual edits + the Phase 8 drop scheduler.
+- Honest error surfaces: 503 keyset unconfigured / 409 not-connected or policies
+  missing / 502 eBay rejected (with eBay's message excerpt).
+- Client: Settings screen (connection status + one-time consent via browser + sign
+  out); review cards gain "Post to eBay" (enabled only with title + chosen price).
+
 ## Pricing research (Phase 4, as built)
 
 - `app/pricing/comps.py` — the pure math, the ONLY source of price numbers: IQR (1.5×)

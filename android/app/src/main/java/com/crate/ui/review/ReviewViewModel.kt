@@ -81,6 +81,24 @@ class ReviewViewModel @Inject constructor(
         saveEdits(id, ItemUpdateRequest(chosenPrice = price), onDone)
     }
 
+    /** The approve tap: draft → live eBay listing. Success removes it from the stack;
+     * failure surfaces the server's honest reason (not connected / policies missing / down). */
+    fun post(id: String, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                api.postItem(id)
+                _drafts.value = (_drafts.value as? UiState.Success)?.let { state ->
+                    UiState.Success(state.data.filterNot { it.id == id })
+                } ?: _drafts.value
+                onResult(null)
+            } catch (e: retrofit2.HttpException) {
+                onResult(e.response()?.errorBody()?.string()?.take(300) ?: "Posting failed")
+            } catch (e: Exception) {
+                onResult(e.message ?: "Posting failed")
+            }
+        }
+    }
+
     fun dismiss(id: String) {
         viewModelScope.launch {
             try {

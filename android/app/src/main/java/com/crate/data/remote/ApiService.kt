@@ -42,4 +42,16 @@ interface ApiService {
 
     @GET("items/{id}/comps")
     suspend fun comps(@Path("id") id: String): CompsDto
+
+    @POST("items/{id}/post")
+    suspend fun postItem(@Path("id") id: String): ItemDto
+
+    @POST("items/{id}/delist")
+    suspend fun delistItem(@Path("id") id: String): ItemDto
+
+    @GET("ebay/connect")
+    suspend fun ebayConnect(): EbayConnectDto
+
+    @GET("ebay/status")
+    suspend fun ebayStatus(): EbayStatusDto
 }

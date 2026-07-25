@@ -62,6 +62,22 @@ class Settings(BaseSettings):
     ebay_client_secret: str | None = None
     ebay_environment: str = "sandbox"  # sandbox | production
     ebay_marketplace_id: str = "EBAY_US"
+    # The RuName (redirect_uri value) registered on the keyset — points at Crate's
+    # /ebay/callback via the ts.net URL. Needed for the one-time seller consent.
+    ebay_ru_name: str | None = None
+    # Business-policy ids + ship-from location (human-gated seller setup, per environment).
+    # Publishing 409s with a clear message until all three policies exist.
+    ebay_fulfillment_policy_id: str | None = None
+    ebay_payment_policy_id: str | None = None
+    ebay_return_policy_id: str | None = None
+    ebay_location_key: str = "crate-home"
+    ebay_location_postal_code: str | None = None
+    ebay_location_country: str = "US"
+
+    # Fernet key for eBay OAuth tokens at rest (generate: python -c
+    # "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())").
+    # Unset ⇒ /ebay/connect 503s — tokens are never stored unencrypted.
+    fernet_key: str | None = None
 
 
 settings = Settings()

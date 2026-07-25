@@ -70,6 +70,20 @@ data class PriceEventDto(
 )
 
 @Serializable
+data class EbayConnectDto(
+    @SerialName("authorize_url") val authorizeUrl: String,
+)
+
+@Serializable
+data class EbayStatusDto(
+    val configured: Boolean,
+    val connected: Boolean,
+    val environment: String? = null,
+    @SerialName("access_expires_at") val accessExpiresAt: String? = null,
+    @SerialName("refresh_expires_at") val refreshExpiresAt: String? = null,
+)
+
+@Serializable
 data class ItemUpdateRequest(
     val title: String? = null,
     val description: String? = null,

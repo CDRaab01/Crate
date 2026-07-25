@@ -13,6 +13,7 @@ import com.crate.ui.home.HomeScreen
 import com.crate.ui.items.ItemDetailScreen
 import com.crate.ui.items.ItemsScreen
 import com.crate.ui.review.ReviewScreen
+import com.crate.ui.settings.SettingsScreen
 
 @Composable
 fun CrateNavHost(
@@ -54,6 +55,7 @@ fun CrateNavHost(
                 onCapture = { navController.navigate(Screen.Capture.route) },
                 onReview = { navController.navigate(Screen.Review.route) },
                 onItems = { navController.navigate(Screen.Items.route) },
+                onSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
         composable(Screen.Capture.route) { CaptureScreen() }
@@ -62,5 +64,12 @@ fun CrateNavHost(
             ItemsScreen(onItem = { id -> navController.navigate(Screen.ItemDetail.withId(id)) })
         }
         composable(Screen.ItemDetail.route) { ItemDetailScreen() }
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onSignedOut = {
+                    navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } }
+                },
+            )
+        }
     }
 }

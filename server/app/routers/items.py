@@ -30,7 +30,8 @@ from app.pricing.comps import compute_prices
 from app.schemas.item import CompOut, CompsOut, ItemOut, ItemUpdate, ScanAccepted
 from app.schemas.template import PriceEventOut
 from app.security import CurrentUser
-from app.services import photo_store, scan_pipeline
+from app.services import item_lifecycle, photo_store, scan_pipeline
+from app.services.ebay import sell
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -144,6 +145,48 @@ async def update_item(
         if name == "dims_in_est" and value is not None:
             value = dict(value)
         setattr(item, name if name != "dims_in_est" else "dims_in_est", value)
+    await db.commit()
+    return await _owned_item(db, user.id, item_id)
+
+
+@router.post("/{item_id}/post", response_model=ItemOut)
+@limiter.limit("20/minute")
+async def post_item(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """The explicit approve tap: draft → live eBay listing (EPS photos → inventory →
+    offer → publish). Money-adjacent, so it NEVER happens unattended (CLAUDE.md §9)."""
+    item = await _owned_item(db, user.id, item_id)
+    if item.status != "draft":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"Only drafts can be posted (status={item.status!r})"
+        )
+    await sell.publish_item(db, item)
+    await item_lifecycle.transition(db, item, "active")
+    await db.commit()
+    return await _owned_item(db, user.id, item_id)
+
+
+@router.post("/{item_id}/delist", response_model=ItemOut)
+@limiter.limit("20/minute")
+async def delist_item(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Withdraw the live offer; the item can be relisted or deleted afterwards."""
+    item = await _owned_item(db, user.id, item_id)
+    if item.status != "active":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Only active listings can be delisted (status={item.status!r})",
+        )
+    await sell.end_listing(db, item)
+    await item_lifecycle.transition(db, item, "delisted")
     await db.commit()
     return await _owned_item(db, user.id, item_id)
 
