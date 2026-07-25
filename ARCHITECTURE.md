@@ -56,6 +56,35 @@ local prefs), `util/AppPreferences` (server URL), the AppAuth
 `RedirectUriReceiverActivity` AppCompat theme override, and the committed stable
 keystore (`app/crate-debug.keystore`) with the suite-key release path in `release.yml`.
 
+### UI shell + brand kit (visual redesign round, 2026-07-25)
+
+- **Navigation shell**: `ui/navigation/TopLevelDestination.kt` (5 tabs — Home, Sell
+  → capture, Review, Registry → items, Inbox — reusing existing routes) +
+  `CrateBottomBar` (Spotter `PulseBottomBar` clone: hairline divider, panel bar,
+  copper selection) inside a `Scaffold` in `CrateNavHost`. The NavHost gets
+  `Modifier.padding(padding).consumeWindowInsets(padding)` — without it, detail
+  screens' inner TopAppBars double-apply system-bar insets (suite landmine). Detail
+  routes (item detail, ship, settings) show a back-arrow `TopAppBar` and no bottom
+  bar; gate/login show no chrome. Tab navigation uses
+  `popUpTo(findStartDestination){saveState}; launchSingleTop; restoreState`.
+- **Brand kit**: `ui/components/CrateBrand.kt` — `CrateGlyph` (isometric open-box
+  ImageVector, 48-grid; full-color copper or single-tint monochrome via alpha steps),
+  `CrateWordmark` ("CRATE" in Saira Stencil One, OFL, bundled at
+  `res/font/saira_stencil_one_regular.ttf`; the FontFamily lives in
+  `ui/theme/BrandType.kt` and is deliberately internal — stencil is wordmark-only,
+  never UI text), `BrandLogo` (hero-gradient tile + white glyph). The adaptive
+  launcher icon reuses the same glyph geometry on the hero gradient with a safe-zone
+  group, and adds a `<monochrome>` layer (first in the suite).
+- **Home is a dashboard**: `HomeViewModel` (reuses `GET /items` + `GET
+  /messages?unresolved_only=true`; errors degrade to zeroed stats) feeding a stateless
+  `HomeContent` — HeroPanel with glyph/wordmark/settings gear, three dense StatTiles
+  (Active/Sold/Drafts), an attention card when buyer messages wait, and a recent-items
+  strip. Counts are display aggregation only; pricing math stays server-side.
+- Screens use the Pulse component set (EmptyState/ErrorState, PulseSegmentedControl,
+  PulseSelectableCard, SettingsSection/ProfileHeader, ChannelDot, Sparkline, Caption,
+  DataText) rather than hand-rolled equivalents; dev-facing copy was replaced with
+  product copy in the same round.
+
 ## CI/CD
 
 - `ci.yml` — server ruff + pytest (Postgres service, migrations first), Android unit

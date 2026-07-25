@@ -4,14 +4,25 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,23 +33,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.crate.BuildConfig
 import com.crate.ui.auth.AuthViewModel
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
+import design.pulse.ui.components.Caption
+import design.pulse.ui.components.ChannelDot
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.ProfileHeader
 import design.pulse.ui.components.PulseButton
-import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.PulseSegmentedControl
+import design.pulse.ui.components.SettingsSection
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onSignedOut: () -> Unit,
+    onBack: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val ebay by viewModel.ebayStatus.collectAsState()
     val connectUrl by viewModel.connectUrl.collectAsState()
+    val user by viewModel.user.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
 
     // The one-time seller consent runs in the browser (redirect lands on the server's
     // tailnet callback, not in the app).
@@ -49,74 +70,124 @@ fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(CrateTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
-    ) {
-        SectionHeader(label = "eBay", channel = CrateTheme.colors.copper.base)
-        when (val state = ebay) {
-            is UiState.Loading, UiState.Idle -> PanelCard { Text("Checking connection…") }
-            is UiState.Error -> PanelCard {
-                Text(state.message, color = MaterialTheme.colorScheme.error)
-            }
-            is UiState.Success -> PanelCard {
-                val s = state.data
-                Text(
-                    when {
-                        !s.configured -> "Keyset not configured on the server yet — pricing " +
-                            "and posting stay off until the eBay developer account exists."
-                        s.connected -> "Connected (${s.environment}). Refresh token expires " +
-                            "${s.refreshExpiresAt?.take(10) ?: "—"} (~18-month lifetime; " +
-                            "Crate will warn well before)."
-                        else -> "Keyset configured, seller account not connected."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = CrateTheme.spacing.lg)
+                .padding(bottom = CrateTheme.spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
+        ) {
+            user?.let {
+                ProfileHeader(
+                    name = it.name,
+                    email = it.email,
+                    channel = CrateTheme.colors.copper.base,
+                    channelDim = CrateTheme.colors.copper.dim,
                 )
-                if (state.data.configured && !state.data.connected) {
-                    PulseButton(
-                        text = "Connect eBay (one-time consent)",
-                        onClick = { viewModel.startConnect() },
-                        modifier = Modifier.fillMaxWidth(),
+            }
+
+            SettingsSection(title = "eBay") {
+                when (val state = ebay) {
+                    is UiState.Loading, UiState.Idle -> PanelCard { Text("Checking connection…") }
+                    is UiState.Error -> PanelCard {
+                        Text(state.message, color = MaterialTheme.colorScheme.error)
+                    }
+                    is UiState.Success -> PanelCard {
+                        val s = state.data
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ChannelDot(
+                                color = if (s.connected) {
+                                    CrateTheme.colors.sold.base
+                                } else {
+                                    CrateTheme.colors.attention.base
+                                },
+                            )
+                            Text(
+                                text = when {
+                                    !s.configured -> "  Not connected"
+                                    s.connected -> "  Connected (${s.environment})"
+                                    else -> "  Ready to connect"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                        Text(
+                            when {
+                                !s.configured -> "eBay isn't set up on the server yet. Pricing " +
+                                    "and posting switch on once it's connected."
+                                s.connected -> "Renews automatically — access expires " +
+                                    "${s.refreshExpiresAt?.take(10) ?: "—"}."
+                                else -> "Link your seller account to enable pricing and posting."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (s.configured && !s.connected) {
+                            PulseButton(
+                                text = "Connect eBay",
+                                onClick = { viewModel.startConnect() },
+                                gradient = CrateTheme.colors.heroGradient,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        PulseButton(
+                            text = "Refresh status",
+                            onClick = { viewModel.refresh() },
+                            tonal = true,
+                            compact = true,
+                        )
+                    }
+                }
+            }
+
+            userSettings?.let { s ->
+                SettingsSection(title = "Selling") {
+                    DropPolicyCard(
+                        enabled = s.dropsEnabled,
+                        intervalDays = s.dropIntervalDays,
+                        stepPercent = s.dropStepPercent,
+                        preference = s.shippingPreference,
+                        onSave = viewModel::saveDropPolicy,
                     )
                 }
+            }
+
+            SettingsSection(title = "Account") {
                 PulseButton(
-                    text = "Refresh status",
-                    onClick = { viewModel.refresh() },
+                    text = "Sign out",
+                    onClick = {
+                        authViewModel.signOut()
+                        onSignedOut()
+                    },
                     tonal = true,
-                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                Caption(text = "Crate ${BuildConfig.VERSION_NAME}")
             }
         }
-
-        val userSettings by viewModel.userSettings.collectAsState()
-        userSettings?.let { s ->
-            SectionHeader(label = "Price drops", channel = CrateTheme.colors.pricing.base)
-            DropPolicyCard(
-                enabled = s.dropsEnabled,
-                intervalDays = s.dropIntervalDays,
-                stepPercent = s.dropStepPercent,
-                preference = s.shippingPreference,
-                onSave = viewModel::saveDropPolicy,
-            )
-        }
-
-        SectionHeader(label = "Account", channel = CrateTheme.colors.attention.base)
-        PulseButton(
-            text = "Sign out",
-            onClick = {
-                authViewModel.signOut()
-                onSignedOut()
-            },
-            tonal = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
 @Composable
-private fun DropPolicyCard(
+internal fun DropPolicyCard(
     enabled: Boolean,
     intervalDays: Int,
     stepPercent: String,
@@ -129,13 +200,16 @@ private fun DropPolicyCard(
     var fastest by remember(preference) { mutableStateOf(preference == "fastest") }
 
     PanelCard {
-        Text(
-            "Unsold listings drop -$step% every $interval days, never below the quick-sale " +
-                "floor. Deterministic policy — every drop is logged and pinged.",
-            style = MaterialTheme.typography.bodySmall,
-        )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Auto price drops", modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text("Automatic price drops", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Unsold listings drop $step% every $interval days, never below your " +
+                        "quick-sale floor. Every drop is logged and you're notified.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Switch(checked = dropsOn, onCheckedChange = { dropsOn = it })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
@@ -143,21 +217,27 @@ private fun DropPolicyCard(
                 value = interval,
                 onValueChange = { interval = it.filter(Char::isDigit).take(2) },
                 label = { Text("Every N days") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
             OutlinedTextField(
                 value = step,
                 onValueChange = { step = it.filter { c -> c.isDigit() || c == '.' } },
                 label = { Text("Step %") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.weight(1f),
             )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Prefer fastest shipping (default: cheapest)", modifier = Modifier.weight(1f))
-            Switch(checked = fastest, onCheckedChange = { fastest = it })
-        }
+        Caption(text = "Shipping preference")
+        PulseSegmentedControl(
+            options = listOf("Cheapest", "Fastest"),
+            selectedIndex = if (fastest) 1 else 0,
+            onSelect = { fastest = it == 1 },
+            channel = CrateTheme.colors.copper.base,
+            channelDim = CrateTheme.colors.copper.dim,
+        )
         PulseButton(
-            text = "Save policy",
+            text = "Save",
             onClick = {
                 interval.toIntOrNull()?.let { days ->
                     onSave(dropsOn, days, step, if (fastest) "fastest" else "cheapest")

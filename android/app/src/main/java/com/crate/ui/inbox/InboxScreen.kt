@@ -6,8 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,9 +25,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
+import design.pulse.ui.components.Caption
+import design.pulse.ui.components.ChannelDot
+import design.pulse.ui.components.EmptyState
+import design.pulse.ui.components.ErrorState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
-import design.pulse.ui.components.SectionHeader
 
 @Composable
 fun InboxScreen(
@@ -36,12 +44,8 @@ fun InboxScreen(
             .padding(CrateTheme.spacing.lg),
         verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
     ) {
-        SectionHeader(label = "Buyer messages", channel = CrateTheme.colors.attention.base)
-        Text(
-            "Crate flags — replies happen in the eBay app.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text("Inbox", style = MaterialTheme.typography.headlineSmall)
+        Caption(text = "Crate flags — replies happen in the eBay app.")
 
         when (val state = messages) {
             is UiState.Loading, UiState.Idle -> Box(
@@ -49,12 +53,19 @@ fun InboxScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator(color = CrateTheme.colors.attention.base) }
 
-            is UiState.Error -> PanelCard {
-                Text(state.message, color = MaterialTheme.colorScheme.error)
-            }
+            is UiState.Error -> ErrorState(
+                icon = Icons.Outlined.CloudOff,
+                title = "Couldn't load messages",
+                detail = state.message,
+                onRetry = { viewModel.refresh() },
+            )
 
             is UiState.Success -> if (state.data.isEmpty()) {
-                PanelCard { Text("No buyer messages. Quiet is good.") }
+                EmptyState(
+                    icon = Icons.Outlined.Inbox,
+                    title = "No buyer messages",
+                    subtitle = "Quiet is good.",
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
                     items(state.data, key = { it.id }) { message ->
@@ -74,16 +85,27 @@ internal fun MessageCard(
     message: com.crate.data.remote.MessageDto,
     onResolve: () -> Unit,
 ) {
-    PanelCard {
-        Text(
-            message.messageType.replace('_', ' ').uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (message.messageType == "return_request") {
-                MaterialTheme.colorScheme.error
-            } else {
-                CrateTheme.colors.attention.base
-            },
-        )
+    val typeColor = if (message.messageType == "return_request") {
+        MaterialTheme.colorScheme.error
+    } else {
+        CrateTheme.colors.attention.base
+    }
+    PanelCard(channel = if (!message.resolved) CrateTheme.colors.attention.base else null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ChannelDot(color = typeColor)
+            Spacer(Modifier.size(6.dp))
+            Text(
+                message.messageType.replace('_', ' ').uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = typeColor,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                message.flaggedAt.take(10),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(message.content, style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!message.resolved) {

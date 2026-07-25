@@ -3,8 +3,6 @@ package com.crate.ui.review
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -39,12 +40,16 @@ import com.crate.data.remote.ItemDto
 import com.crate.data.remote.ItemUpdateRequest
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
+import design.pulse.ui.components.Caption
+import design.pulse.ui.components.ChannelDot
+import design.pulse.ui.components.EmptyState
+import design.pulse.ui.components.ErrorState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
-import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.PulseSelectableCard
 
 /** The review stack: every queued capture lands here as an editable draft. Nothing posts
- * to eBay from this screen yet — posting arrives with Phase 5. */
+ * to eBay without the explicit Post tap on each draft. */
 @Composable
 fun ReviewScreen(
     viewModel: ReviewViewModel = hiltViewModel(),
@@ -57,9 +62,9 @@ fun ReviewScreen(
             .padding(CrateTheme.spacing.lg),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionHeader(
-                label = "Review stack",
-                channel = CrateTheme.colors.copper.base,
+            Text(
+                "Review",
+                style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.weight(1f),
             )
             PulseButton(text = "Refresh", onClick = { viewModel.refresh() }, compact = true, tonal = true)
@@ -72,18 +77,19 @@ fun ReviewScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator(color = CrateTheme.colors.copper.base) }
 
-            is UiState.Error -> PanelCard {
-                Text(state.message, color = MaterialTheme.colorScheme.error)
-            }
+            is UiState.Error -> ErrorState(
+                icon = Icons.Outlined.CloudOff,
+                title = "Couldn't load drafts",
+                detail = state.message,
+                onRetry = { viewModel.refresh() },
+            )
 
             is UiState.Success -> if (state.data.isEmpty()) {
-                PanelCard {
-                    Text(
-                        "No drafts to review. Capture something — it lands here identified, " +
-                            "cleaned up, and ready to edit.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                EmptyState(
+                    icon = Icons.Outlined.FactCheck,
+                    title = "Review stack is clear",
+                    subtitle = "Captured items land here identified, cleaned up, and priced.",
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
                     items(state.data, key = { it.id }) { item ->
@@ -101,7 +107,6 @@ fun ReviewScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DraftCard(
     item: ItemDto,
@@ -149,11 +154,15 @@ internal fun DraftCard(
             style = MaterialTheme.typography.titleMedium,
         )
         if (item.templateId != null) {
-            Text(
-                "FROM TEMPLATE — this model sold before; proven copy pre-filled.",
-                style = MaterialTheme.typography.labelSmall,
-                color = CrateTheme.colors.provenance.base,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelDot(color = CrateTheme.colors.provenance.base)
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    "From template — this model sold before",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CrateTheme.colors.provenance.base,
+                )
+            }
         }
         val subtitle = listOfNotNull(item.brand, item.model, item.condition?.replace('_', ' '))
             .joinToString(" · ")
@@ -179,42 +188,47 @@ internal fun DraftCard(
 
         if (item.quickSalePrice != null || item.patientPrice != null) {
             Spacer(Modifier.size(8.dp))
-            Text(
-                "Active-market prices (not solds) — pick a strategy:",
-                style = MaterialTheme.typography.labelSmall,
-                color = CrateTheme.colors.pricing.base,
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Caption(text = "Pick a price strategy (live-market prices)")
+            Spacer(Modifier.size(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item.quickSalePrice?.let { price ->
-                    PulseButton(
-                        text = if (item.chosenPrice == price) "✓ Quick $$price" else "Quick $$price",
+                    PulseSelectableCard(
+                        label = "Quick · $$price",
+                        selected = item.chosenPrice == price,
                         onClick = { onChoosePrice(price) },
-                        compact = true,
+                        channel = CrateTheme.colors.pricing.base,
+                        channelDim = CrateTheme.colors.pricing.dim,
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 item.patientPrice?.let { price ->
-                    PulseButton(
-                        text = if (item.chosenPrice == price) "✓ Patient $$price" else "Patient $$price",
+                    PulseSelectableCard(
+                        label = "Patient · $$price",
+                        selected = item.chosenPrice == price,
                         onClick = { onChoosePrice(price) },
-                        compact = true,
-                        tonal = true,
+                        channel = CrateTheme.colors.pricing.base,
+                        channelDim = CrateTheme.colors.pricing.dim,
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                PulseButton(
-                    text = "Custom",
-                    onClick = { customPrice = true },
-                    compact = true,
-                    tonal = true,
-                )
             }
+            PulseButton(
+                text = "Custom price…",
+                onClick = { customPrice = true },
+                compact = true,
+                tonal = true,
+            )
         } else {
             Text(
-                "No comp prices (eBay keyset not connected yet) — set a custom price.",
+                "No market comps yet — link eBay in Settings, or set your own price.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            PulseButton(
+                text = "Custom price…",
+                onClick = { customPrice = true },
+                compact = true,
+                tonal = true,
             )
         }
 
@@ -232,6 +246,11 @@ internal fun DraftCard(
                     }
                 },
                 enabled = !posting && item.title != null && item.chosenPrice != null,
+                gradient = if (!posting && item.title != null && item.chosenPrice != null) {
+                    CrateTheme.colors.heroGradient
+                } else {
+                    null
+                },
                 compact = true,
             )
             PulseButton(text = "Edit", onClick = { editing = true }, compact = true, tonal = true)

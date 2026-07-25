@@ -440,3 +440,26 @@ is mocked in CI per §8.
 - **Deferred (post-v1, per §1):** `/cross-app/summary` for the Dragonfly digest
   ("Money" card), buyer-message full bodies + in-app replies, auction format,
   international shipping, multi-marketplace, bookkeeping.
+
+## Visual redesign round (2026-07-25) — brand kit + navigation shell
+
+User-driven polish pass ("look professionally designed, not a science project");
+decisions locked with the user: bottom tabs, a Crate-only display font for branding
+moments, a geometric crate glyph. Android-only; no server/VM-contract changes beyond an
+additive `HomeViewModel` + `SettingsViewModel.user` (both on existing endpoints).
+
+- **Brand kit:** `ui/components/CrateBrand.kt` (`CrateGlyph` isometric open-box vector,
+  `CrateWordmark` in **Saira Stencil One** (OFL, bundled TTF; FontFamily internal to the
+  brand file — stencil never leaks into UI text), `BrandLogo` tile). Launcher icon
+  rebuilt: hero-gradient background (suite pattern), glyph foreground with safe-zone
+  group, **plus a `<monochrome>` themed-icon layer — first in the suite**.
+- **Shell:** 5 bottom tabs (Home/Sell/Review/Registry/Inbox) on existing routes;
+  detail routes get back-arrow TopAppBars; `consumeWindowInsets` per the suite
+  double-insets landmine. Settings moved behind the Home hero's gear.
+- **Home became a dashboard** (HeroPanel + StatTiles + attention card + recent strip);
+  every screen now uses the wider Pulse set (EmptyState/ErrorState, segmented control,
+  selectable price-strategy cards, SettingsSection/ProfileHeader, ChannelDot,
+  Sparkline). Dev-facing copy ("arrives in Phase N", keyset talk) replaced with product
+  copy; Settings gained the missing `verticalScroll` (overflow bug).
+- **Verified:** `:app:testDebugUnitTest` green (33 tests incl. new `HomeViewModelTest`);
+  Roborazzi baselines re-recorded — 16 PNGs (adds settings + shell scenes).

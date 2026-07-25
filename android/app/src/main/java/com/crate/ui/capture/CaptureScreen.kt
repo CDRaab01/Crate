@@ -5,15 +5,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.AddAPhoto
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.data.local.CaptureQueueEntity
 import com.crate.ui.theme.CrateTheme
+import design.pulse.ui.components.Caption
+import design.pulse.ui.components.ChannelDot
+import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
@@ -84,12 +89,29 @@ fun CaptureScreen(
             .padding(CrateTheme.spacing.lg),
         verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Sell",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (queue.isNotEmpty()) {
+                ChannelDot(color = CrateTheme.colors.attention.base)
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    "${queue.size} queued",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CrateTheme.colors.attention.base,
+                )
+            }
+        }
+
         SectionHeader(label = "This item", channel = CrateTheme.colors.copper.base)
 
         if (shots.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(shots) { file ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box {
                         AsyncImage(
                             model = file,
                             contentDescription = "captured photo",
@@ -98,20 +120,27 @@ fun CaptureScreen(
                                 .size(96.dp)
                                 .clip(RoundedCornerShape(12.dp)),
                         )
-                        IconButton(onClick = { viewModel.removeShot(file) }) {
-                            Icon(Icons.Default.Close, contentDescription = "remove photo")
+                        IconButton(
+                            onClick = { viewModel.removeShot(file) },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "remove photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
                     }
                 }
             }
         } else {
-            PanelCard {
-                Text(
-                    "Photograph the item — multiple angles help identification and buyers. " +
-                        "Up to $MAX_PHOTOS_PER_ITEM shots per item.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            EmptyState(
+                icon = Icons.Outlined.AddAPhoto,
+                title = "No shots yet",
+                subtitle = "Multiple angles help identification — and buyers. " +
+                    "Up to $MAX_PHOTOS_PER_ITEM per item.",
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
@@ -119,6 +148,14 @@ fun CaptureScreen(
                 text = "Snap photo",
                 onClick = { snap() },
                 enabled = shots.size < MAX_PHOTOS_PER_ITEM,
+                leadingIcon = {
+                    Icon(
+                        Icons.Outlined.PhotoCamera,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
                 modifier = Modifier.weight(1f),
             )
             PulseButton(
@@ -133,20 +170,18 @@ fun CaptureScreen(
             text = if (shots.isEmpty()) "Queue item" else "Queue item (${shots.size} photos)",
             onClick = { viewModel.queueItem() },
             enabled = shots.isNotEmpty(),
+            gradient = if (shots.isNotEmpty()) CrateTheme.colors.heroGradient else null,
             modifier = Modifier.fillMaxWidth(),
         )
 
         Column {
             SectionHeader(
-                label = "Queue",
+                label = "Upload queue",
                 channel = CrateTheme.colors.attention.base,
                 trailing = { Text("${queue.size} waiting") },
             )
             if (queue.isEmpty()) {
-                Text(
-                    "Nothing waiting — queued items upload in the background and land in Review.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Caption(text = "Queued items upload in the background and land in Review.")
             }
         }
         queue.forEach { entry ->
@@ -165,7 +200,8 @@ private fun QueueRow(
     onRetry: () -> Unit,
     onDiscard: () -> Unit,
 ) {
-    PanelCard {
+    val failed = entry.state == CaptureQueueEntity.STATE_FAILED
+    PanelCard(channel = if (failed) CrateTheme.colors.attention.base else null) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.EbayStatusDto
+import com.crate.data.remote.UserDto
 import com.crate.data.remote.UserSettingsDto
 import com.crate.data.remote.UserSettingsUpdate
 import com.crate.util.UiState
@@ -28,6 +29,9 @@ class SettingsViewModel @Inject constructor(
     private val _userSettings = MutableStateFlow<UserSettingsDto?>(null)
     val userSettings: StateFlow<UserSettingsDto?> = _userSettings
 
+    private val _user = MutableStateFlow<UserDto?>(null)
+    val user: StateFlow<UserDto?> = _user
+
     init {
         refresh()
     }
@@ -41,6 +45,11 @@ class SettingsViewModel @Inject constructor(
             }
             _userSettings.value = try {
                 api.getSettings()
+            } catch (_: Exception) {
+                null
+            }
+            _user.value = try {
+                api.me()
             } catch (_: Exception) {
                 null
             }
@@ -71,7 +80,7 @@ class SettingsViewModel @Inject constructor(
                 _connectUrl.value = api.ebayConnect().authorizeUrl
             } catch (e: Exception) {
                 _ebayStatus.value =
-                    UiState.Error("eBay connect unavailable — is the keyset configured?")
+                    UiState.Error("Couldn't start eBay sign-in — check the connection and try again.")
             }
         }
     }

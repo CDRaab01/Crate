@@ -2,7 +2,6 @@ package com.crate.ui.auth
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,12 +18,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.crate.ui.components.BrandLogo
+import com.crate.ui.components.CrateWordmark
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
+import design.pulse.ui.components.Caption
 import design.pulse.ui.components.PulseButton
 
 /**
@@ -68,26 +67,13 @@ internal fun LoginContent(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(CrateTheme.colors.heroGradient)
-                .padding(CrateTheme.spacing.lg),
-        ) {
-            Text(
-                text = "Crate",
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-            )
-            Text(
-                text = "Photo → listed → sold → shipped.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f),
-            )
-        }
+        BrandLogo(size = 96.dp)
+        Spacer(Modifier.height(24.dp))
+        CrateWordmark(large = true, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(Modifier.height(8.dp))
+        Caption(text = "Photo in. Package out.")
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(48.dp))
 
         when (val state = signInState) {
             is UiState.Loading -> CircularProgressIndicator(
@@ -97,6 +83,7 @@ internal fun LoginContent(
                 PulseButton(
                     text = "Sign in with Dragonfly",
                     onClick = onSignIn,
+                    gradient = CrateTheme.colors.heroGradient,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (state is UiState.Error) {

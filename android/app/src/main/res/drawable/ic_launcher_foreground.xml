@@ -1,24 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- An open shipping crate: box body with a tape stripe and two open top flaps. -->
+<!-- The Crate glyph (isometric open box), matching ui/components/CrateBrand.kt geometry
+     mapped onto the 108 grid (x' = 1.75x + 12). Safe-zone group per the suite fix. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- box body -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M36,50 L72,50 L72,76 Q72,78 70,78 L38,78 Q36,78 36,76 Z" />
-    <!-- tape stripe down the middle of the body, in the backdrop copper -->
-    <path
-        android:fillColor="#9A4D1B"
-        android:pathData="M51.5,50 L56.5,50 L56.5,78 L51.5,78 Z" />
-    <!-- left open flap -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M36,48 L27,36.5 L44,33.5 L47,45.5 Z" />
-    <!-- right open flap -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M72,48 L81,36.5 L64,33.5 L61,45.5 Z" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <!-- interior (open-top shadow) -->
+        <path
+            android:fillColor="#73FFFFFF"
+            android:pathData="M26,50.5 L54,36.5 L82,50.5 L54,64.5 Z" />
+        <!-- left face -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M26,50.5 L54,64.5 L54,89 L26,75 Z" />
+        <!-- right face -->
+        <path
+            android:fillColor="#D9FFFFFF"
+            android:pathData="M54,64.5 L82,50.5 L82,75 L54,89 Z" />
+        <!-- left open flap -->
+        <path
+            android:fillColor="#E6FFFFFF"
+            android:pathData="M26,50.5 L54,36.5 L43.5,18.13 L15.5,32.13 Z" />
+        <!-- right open flap -->
+        <path
+            android:fillColor="#E6FFFFFF"
+            android:pathData="M82,50.5 L54,36.5 L64.5,18.13 L92.5,32.13 Z" />
+        <!-- tape stripe on the right face, in the backdrop copper -->
+        <path
+            android:fillColor="#9A4D1B"
+            android:pathData="M66.25,56.63 L71.5,54 L71.5,78.85 L66.25,81.48 Z" />
+    </group>
 </vector>

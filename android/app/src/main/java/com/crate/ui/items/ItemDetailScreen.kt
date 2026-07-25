@@ -14,54 +14,95 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.LocalShipping
+import androidx.compose.material.icons.outlined.Scale
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.data.remote.ItemDto
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
+import design.pulse.ui.components.ChannelDot
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.Sparkline
 import kotlinx.serialization.json.JsonPrimitive
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemDetailScreen(
     onShip: (String) -> Unit = {},
+    onBack: () -> Unit = {},
     viewModel: ItemDetailViewModel = hiltViewModel(),
 ) {
     val itemState by viewModel.item.collectAsState()
     val priceEvents by viewModel.priceEvents.collectAsState()
     val sale by viewModel.sale.collectAsState()
 
-    when (val state = itemState) {
-        is UiState.Loading, UiState.Idle -> Box(
-            Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator(color = CrateTheme.colors.copper.base) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        (itemState as? UiState.Success)?.data?.title ?: "Item",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Box(Modifier.padding(padding)) {
+            when (val state = itemState) {
+                is UiState.Loading, UiState.Idle -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator(color = CrateTheme.colors.copper.base) }
 
-        is UiState.Error -> Box(Modifier.fillMaxSize().padding(CrateTheme.spacing.lg)) {
-            PanelCard { Text(state.message, color = MaterialTheme.colorScheme.error) }
+                is UiState.Error -> Box(Modifier.fillMaxSize().padding(CrateTheme.spacing.lg)) {
+                    PanelCard { Text(state.message, color = MaterialTheme.colorScheme.error) }
+                }
+
+                is UiState.Success -> Detail(
+                    item = state.data,
+                    priceEvents = priceEvents,
+                    sale = sale,
+                    onShip = onShip,
+                    onDelist = { viewModel.delist {} },
+                    onRelist = { viewModel.relist {} },
+                )
+            }
         }
-
-        is UiState.Success -> Detail(
-            item = state.data,
-            priceEvents = priceEvents,
-            sale = sale,
-            onShip = onShip,
-            onDelist = { viewModel.delist {} },
-            onRelist = { viewModel.relist {} },
-        )
     }
 }
 
@@ -89,22 +130,25 @@ internal fun Detail(
                         contentDescription = "item photo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(140.dp)
-                            .clip(RoundedCornerShape(12.dp)),
+                            .size(160.dp)
+                            .clip(RoundedCornerShape(16.dp)),
                     )
                 }
             }
         }
 
-        Text(item.title ?: "Unidentified item", style = MaterialTheme.typography.headlineSmall)
         Row(verticalAlignment = Alignment.CenterVertically) {
+            ChannelDot(color = statusColor(item.status))
+            Spacer(Modifier.size(6.dp))
             Text(
                 item.status.uppercase(),
                 style = MaterialTheme.typography.labelMedium,
                 color = statusColor(item.status),
             )
             if (item.templateId != null) {
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.size(12.dp))
+                ChannelDot(color = CrateTheme.colors.provenance.base)
+                Spacer(Modifier.size(6.dp))
                 Text(
                     "FROM TEMPLATE",
                     style = MaterialTheme.typography.labelSmall,
@@ -126,7 +170,7 @@ internal fun Detail(
             PriceLine("Chosen", item.chosenPrice)
             if (item.quickSalePrice == null && item.patientPrice == null) {
                 Text(
-                    "No prices yet — pricing research arrives in Phase 4.",
+                    "Pricing appears once your eBay account is linked in Settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -136,6 +180,18 @@ internal fun Detail(
         if (priceEvents.isNotEmpty()) {
             SectionHeader(label = "Price history", channel = CrateTheme.colors.pricing.base)
             PanelCard {
+                if (priceEvents.size >= 3) {
+                    val points = (listOf(priceEvents.first().oldPrice) +
+                        priceEvents.map { it.newPrice })
+                        .mapNotNull { it.toFloatOrNull() }
+                    if (points.size >= 2) {
+                        Sparkline(
+                            values = points,
+                            channel = CrateTheme.colors.pricing.base,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
                 priceEvents.forEach { event ->
                     Row {
                         Text(
@@ -179,6 +235,15 @@ internal fun Detail(
                     PulseButton(
                         text = "Ship it",
                         onClick = { onShip(item.id) },
+                        gradient = CrateTheme.colors.heroGradient,
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.LocalShipping,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -187,16 +252,31 @@ internal fun Detail(
 
         SectionHeader(label = "Shipping estimate", channel = CrateTheme.colors.copper.base)
         PanelCard {
-            Text(
-                buildString {
-                    append(item.weightOzEst?.let { "$it oz" } ?: "no weight estimate")
-                    item.dimsInEst?.let { d ->
-                        append("  ·  ${d["l"]}×${d["w"]}×${d["h"]} in")
-                    }
-                    if (!item.weightConfirmed) append("  (unconfirmed)")
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Scale,
+                    contentDescription = null,
+                    tint = CrateTheme.colors.copper.base,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    buildString {
+                        append(item.weightOzEst?.let { "$it oz" } ?: "No weight estimate")
+                        item.dimsInEst?.let { d ->
+                            append("  ·  ${d["l"]}×${d["w"]}×${d["h"]} in")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (!item.weightConfirmed) {
+                Text(
+                    "You'll confirm the packed weight at ship time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         when (item.status) {

@@ -20,10 +20,14 @@ import com.crate.data.remote.PriceEventDto
 import com.crate.data.remote.RateDto
 import com.crate.data.remote.SaleDto
 import com.crate.ui.auth.LoginContent
-import com.crate.ui.home.HomeScreen
+import com.crate.ui.home.HomeContent
+import com.crate.ui.home.HomeStats
 import com.crate.ui.inbox.MessageCard
 import com.crate.ui.items.Detail
+import com.crate.ui.navigation.CrateBottomBar
+import com.crate.ui.navigation.Screen
 import com.crate.ui.review.DraftCard
+import com.crate.ui.settings.DropPolicyCard
 import com.crate.ui.ship.RateRow
 import com.crate.ui.ship.WeightConfirmCard
 import com.crate.ui.theme.CrateTheme
@@ -74,8 +78,14 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("screenshots/$name.png", roborazziOptions = roborazziOptions)
     }
 
-    @Test fun home_light() = capture("home_light", dark = false) { HomeScreen() }
-    @Test fun home_dark() = capture("home_dark", dark = true) { HomeScreen() }
+    @Test fun home_light() = capture("home_light", dark = false) { HomeScene() }
+    @Test fun home_dark() = capture("home_dark", dark = true) { HomeScene() }
+
+    @Test fun settings_light() = capture("settings_light", dark = false) { SettingsScene() }
+    @Test fun settings_dark() = capture("settings_dark", dark = true) { SettingsScene() }
+
+    @Test fun shell_light() = capture("shell_light", dark = false) { ShellScene() }
+    @Test fun shell_dark() = capture("shell_dark", dark = true) { ShellScene() }
 
     @Test fun login_light() = capture("login_light", dark = false) { LoginScene() }
     @Test fun login_dark() = capture("login_dark", dark = true) { LoginScene() }
@@ -96,6 +106,52 @@ class ScreenshotTest {
 @Composable
 private fun LoginScene() {
     LoginContent(signInState = UiState.Idle, onSignIn = {})
+}
+
+@Composable
+private fun HomeScene() {
+    HomeContent(
+        stats = HomeStats(
+            active = 4,
+            sold = 11,
+            drafts = 2,
+            recent = listOf(templatedDraft, lowConfidenceDraft, soldItem),
+            unresolvedMessages = 1,
+            loaded = true,
+        ),
+    )
+}
+
+@Composable
+private fun SettingsScene() {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        design.pulse.ui.components.ProfileHeader(
+            name = "Chris",
+            email = "chris@dragonflymedia.org",
+            channel = CrateTheme.colors.copper.base,
+            channelDim = CrateTheme.colors.copper.dim,
+        )
+        design.pulse.ui.components.SettingsSection(title = "Selling") {
+            DropPolicyCard(
+                enabled = true,
+                intervalDays = 14,
+                stepPercent = "10",
+                preference = "cheapest",
+                onSave = { _, _, _, _ -> },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShellScene() {
+    Column(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        CrateBottomBar(currentRoute = Screen.Home.route, onNavigate = {})
+    }
 }
 
 @Composable
@@ -141,7 +197,9 @@ private fun ShipScene() {
         Text("Shimano Curado 200K baitcast reel", style = MaterialTheme.typography.headlineSmall)
         WeightConfirmCard(item = soldItem, onConfirm = { _, _, _, _ -> })
         SectionHeader(label = "Rates", channel = CrateTheme.colors.pricing.base)
-        rates.forEach { rate -> RateRow(rate = rate, onBuy = {}) }
+        rates.forEach { rate ->
+            RateRow(rate = rate, onBuy = {}, cheapest = rate.rateId == "r1")
+        }
     }
 }
 
