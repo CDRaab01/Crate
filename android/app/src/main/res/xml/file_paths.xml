@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Camera captures land in cache/captures/ (transient); queued photos move to
+     files/capture_queue/ until their upload succeeds. -->
+<paths>
+    <cache-path name="captures" path="captures/" />
+    <files-path name="capture_queue" path="capture_queue/" />
+</paths>

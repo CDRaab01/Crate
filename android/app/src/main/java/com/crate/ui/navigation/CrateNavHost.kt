@@ -8,7 +8,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.crate.ui.auth.AuthViewModel
 import com.crate.ui.auth.LoginScreen
+import com.crate.ui.capture.CaptureScreen
 import com.crate.ui.home.HomeScreen
+import com.crate.ui.review.ReviewScreen
 
 @Composable
 fun CrateNavHost(
@@ -45,6 +47,13 @@ fun CrateNavHost(
                 },
             )
         }
-        composable(Screen.Home.route) { HomeScreen() }
+        composable(Screen.Home.route) {
+            HomeScreen(
+                onCapture = { navController.navigate(Screen.Capture.route) },
+                onReview = { navController.navigate(Screen.Review.route) },
+            )
+        }
+        composable(Screen.Capture.route) { CaptureScreen() }
+        composable(Screen.Review.route) { ReviewScreen() }
     }
 }

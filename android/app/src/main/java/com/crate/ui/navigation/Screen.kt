@@ -5,9 +5,11 @@ sealed class Screen(val route: String) {
     data object Gate : Screen("gate")
     data object Login : Screen("login")
     data object Home : Screen("home")
+    data object Capture : Screen("capture")
+    data object Review : Screen("review")
 
     companion object {
         /** Every route, for the uniqueness guard test. */
-        val all: List<Screen> = listOf(Gate, Login, Home)
+        val all: List<Screen> = listOf(Gate, Login, Home, Capture, Review)
     }
 }

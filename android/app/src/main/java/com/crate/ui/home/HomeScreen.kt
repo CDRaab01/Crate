@@ -3,6 +3,7 @@ package com.crate.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,16 +15,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import design.pulse.ui.components.PanelCard
-import design.pulse.ui.components.SectionHeader
 import com.crate.ui.theme.CrateTheme
+import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.PulseButton
+import design.pulse.ui.components.SectionHeader
 
-/**
- * Phase 0 placeholder: proves the copper theme + Pulse components render. The real home surface
- * (capture queue, review stack, registry) arrives with Phases 2-3.
- */
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onCapture: () -> Unit = {},
+    onReview: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -50,9 +51,23 @@ fun HomeScreen() {
         }
 
         SectionHeader(label = "Pipeline", channel = CrateTheme.colors.copper.base)
+        Row(horizontalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
+            PulseButton(
+                text = "Capture",
+                onClick = onCapture,
+                modifier = Modifier.weight(1f),
+            )
+            PulseButton(
+                text = "Review",
+                onClick = onReview,
+                tonal = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
         PanelCard {
             Text(
-                text = "Nothing in the crate yet. Capture, review, and selling arrive in the next phases.",
+                text = "Snap items in a batch — each becomes a cleaned-up, identified draft " +
+                    "in the review stack. Pricing, posting, and shipping arrive phase by phase.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }

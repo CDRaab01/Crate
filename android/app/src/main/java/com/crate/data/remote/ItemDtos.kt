@@ -1,0 +1,59 @@
+package com.crate.data.remote
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class ItemPhotoDto(
+    val id: String,
+    val order: Int,
+    val cleaned: Boolean,
+    @SerialName("ebay_url") val ebayUrl: String? = null,
+)
+
+@Serializable
+data class ItemDto(
+    val id: String,
+    val title: String? = null,
+    val description: String? = null,
+    val brand: String? = null,
+    val model: String? = null,
+    @SerialName("category_id") val categoryId: String? = null,
+    val condition: String? = null,
+    val status: String,
+    @SerialName("quick_sale_price") val quickSalePrice: String? = null,
+    @SerialName("patient_price") val patientPrice: String? = null,
+    @SerialName("chosen_price") val chosenPrice: String? = null,
+    val currency: String = "USD",
+    @SerialName("ebay_listing_id") val ebayListingId: String? = null,
+    @SerialName("weight_oz_est") val weightOzEst: String? = null,
+    @SerialName("dims_in_est") val dimsInEst: Map<String, Double>? = null,
+    @SerialName("weight_confirmed") val weightConfirmed: Boolean = false,
+    @SerialName("template_id") val templateId: String? = null,
+    @SerialName("date_listed") val dateListed: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("processed_at") val processedAt: String? = null,
+    @SerialName("scan_error") val scanError: String? = null,
+    val photos: List<ItemPhotoDto> = emptyList(),
+)
+
+@Serializable
+data class ScanAcceptedDto(
+    val id: String,
+    val status: String,
+    @SerialName("photo_count") val photoCount: Int,
+)
+
+@Serializable
+data class ItemUpdateRequest(
+    val title: String? = null,
+    val description: String? = null,
+    val brand: String? = null,
+    val model: String? = null,
+    @SerialName("category_id") val categoryId: String? = null,
+    val condition: String? = null,
+    @SerialName("chosen_price") val chosenPrice: String? = null,
+    @SerialName("weight_oz_est") val weightOzEst: String? = null,
+    @SerialName("dims_in_est") val dimsInEst: Map<String, Double>? = null,
+    @SerialName("weight_confirmed") val weightConfirmed: Boolean? = null,
+)

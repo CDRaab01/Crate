@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Batch capture: in-app camera. Declaring CAMERA makes the runtime grant mandatory
+         before launching capture — the screen requests it and falls back to the gallery
+         picker on denial. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- Read suite connection config from the Dragonfly hub. Granted only because all suite
          apps share one signing key; harmless if Dragonfly isn't installed. -->
     <uses-permission android:name="com.dragonfly.permission.READ_SUITE_CONFIG" />
@@ -42,6 +48,30 @@
             android:name="net.openid.appauth.RedirectUriReceiverActivity"
             android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
             tools:node="merge" />
+
+        <!-- Hands the camera a cache-dir target for capture shots; queued photos are moved
+             into filesDir/capture_queue/ so they survive until uploaded. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.crate.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Hilt worker factory: remove WorkManager's default initializer. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>
