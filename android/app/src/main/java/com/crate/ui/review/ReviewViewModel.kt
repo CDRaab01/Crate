@@ -23,6 +23,9 @@ class ReviewViewModel @Inject constructor(
     private val _drafts = MutableStateFlow<UiState<List<ItemDto>>>(UiState.Loading)
     val drafts: StateFlow<UiState<List<ItemDto>>> = _drafts
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing
+
     private var polling = false
 
     init {
@@ -31,6 +34,7 @@ class ReviewViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
+            _refreshing.value = true
             _drafts.value = try {
                 val items = api.listItems(status = "draft")
                 maybePoll(items)
@@ -38,6 +42,7 @@ class ReviewViewModel @Inject constructor(
             } catch (e: Exception) {
                 UiState.Error(e.message ?: "Couldn't load drafts")
             }
+            _refreshing.value = false
         }
     }
 

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.FactCheck
@@ -39,13 +41,16 @@ import com.crate.BuildConfig
 import com.crate.data.remote.ItemDto
 import com.crate.data.remote.ItemUpdateRequest
 import com.crate.ui.theme.CrateTheme
+import com.crate.util.OnResumeEffect
 import com.crate.util.UiState
 import design.pulse.ui.components.Caption
 import design.pulse.ui.components.ChannelDot
+import design.pulse.ui.components.DataText
 import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.ErrorState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
+import design.pulse.ui.components.PulseRefreshBox
 import design.pulse.ui.components.PulseSelectableCard
 
 /** The review stack: every queued capture lands here as an editable draft. Nothing posts
@@ -55,51 +60,66 @@ fun ReviewScreen(
     viewModel: ReviewViewModel = hiltViewModel(),
 ) {
     val drafts by viewModel.drafts.collectAsState()
+    val refreshing by viewModel.refreshing.collectAsState()
+
+    OnResumeEffect { viewModel.refresh() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(CrateTheme.spacing.lg),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Review",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.weight(1f),
-            )
-            PulseButton(text = "Refresh", onClick = { viewModel.refresh() }, compact = true, tonal = true)
-        }
+        Text("Review", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.size(CrateTheme.spacing.md))
 
-        when (val state = drafts) {
-            is UiState.Loading, UiState.Idle -> Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator(color = CrateTheme.colors.copper.base) }
+        PulseRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = viewModel::refresh,
+            channel = CrateTheme.colors.copper.base,
+            modifier = Modifier.weight(1f),
+        ) {
+            when (val state = drafts) {
+                is UiState.Loading, UiState.Idle -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator(color = CrateTheme.colors.copper.base) }
 
-            is UiState.Error -> ErrorState(
-                icon = Icons.Outlined.CloudOff,
-                title = "Couldn't load drafts",
-                detail = state.message,
-                onRetry = { viewModel.refresh() },
-            )
-
-            is UiState.Success -> if (state.data.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.FactCheck,
-                    title = "Review stack is clear",
-                    subtitle = "Captured items land here identified, cleaned up, and priced.",
+                is UiState.Error -> ErrorState(
+                    icon = Icons.Outlined.CloudOff,
+                    title = "Couldn't load drafts",
+                    detail = state.message,
+                    onRetry = { viewModel.refresh() },
                 )
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
-                    items(state.data, key = { it.id }) { item ->
-                        DraftCard(
-                            item = item,
-                            onSave = { update, done -> viewModel.saveEdits(item.id, update, done) },
-                            onDismiss = { viewModel.dismiss(item.id) },
-                            onChoosePrice = { price -> viewModel.choosePrice(item.id, price) },
-                            onPost = { done -> viewModel.post(item.id, done) },
+
+                is UiState.Success -> if (state.data.isEmpty()) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        EmptyState(
+                            icon = Icons.Outlined.FactCheck,
+                            title = "Review stack is clear",
+                            subtitle = "Captured items land here identified, cleaned up, " +
+                                "and priced.",
                         )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(state.data, key = { it.id }) { item ->
+                            DraftCard(
+                                item = item,
+                                onSave = { update, done ->
+                                    viewModel.saveEdits(item.id, update, done)
+                                },
+                                onDismiss = { viewModel.dismiss(item.id) },
+                                onChoosePrice = { price -> viewModel.choosePrice(item.id, price) },
+                                onPost = { done -> viewModel.post(item.id, done) },
+                            )
+                        }
                     }
                 }
             }
@@ -192,27 +212,21 @@ internal fun DraftCard(
                 Spacer(Modifier.size(4.dp))
                 if (item.quickSalePrice != null || item.patientPrice != null) {
                     Caption(text = "Pick a price strategy (live-market prices)")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item.quickSalePrice?.let { price ->
-                            PulseSelectableCard(
-                                label = "Quick · $$price",
-                                selected = item.chosenPrice == price,
-                                onClick = { onChoosePrice(price) },
-                                channel = CrateTheme.colors.pricing.base,
-                                channelDim = CrateTheme.colors.pricing.dim,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        item.patientPrice?.let { price ->
-                            PulseSelectableCard(
-                                label = "Patient · $$price",
-                                selected = item.chosenPrice == price,
-                                onClick = { onChoosePrice(price) },
-                                channel = CrateTheme.colors.pricing.base,
-                                channelDim = CrateTheme.colors.pricing.dim,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                    item.quickSalePrice?.let { price ->
+                        PriceStrategyCard(
+                            name = "Quick sale",
+                            price = price,
+                            selected = item.chosenPrice == price,
+                            onClick = { onChoosePrice(price) },
+                        )
+                    }
+                    item.patientPrice?.let { price ->
+                        PriceStrategyCard(
+                            name = "Patient",
+                            price = price,
+                            selected = item.chosenPrice == price,
+                            onClick = { onChoosePrice(price) },
+                        )
                     }
                     PulseButton(
                         text = "Custom price…",
@@ -299,6 +313,31 @@ internal fun DraftCard(
             onCancel = { editing = false },
         )
     }
+}
+
+/** Strategy name on the left, mono price on the right — the price never wraps. */
+@Composable
+private fun PriceStrategyCard(
+    name: String,
+    price: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PulseSelectableCard(
+        label = name,
+        selected = selected,
+        onClick = onClick,
+        channel = CrateTheme.colors.pricing.base,
+        channelDim = CrateTheme.colors.pricing.dim,
+        trailing = {
+            DataText(
+                text = "$$price",
+                color = CrateTheme.colors.pricing.base,
+            )
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable

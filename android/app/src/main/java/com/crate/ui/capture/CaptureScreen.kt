@@ -25,10 +25,14 @@ import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +44,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.data.local.CaptureQueueEntity
+import kotlinx.coroutines.launch
 import com.crate.ui.theme.CrateTheme
 import design.pulse.ui.components.Caption
 import design.pulse.ui.components.ChannelDot
@@ -82,6 +87,10 @@ fun CaptureScreen(
         else permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -168,7 +177,16 @@ fun CaptureScreen(
         }
         PulseButton(
             text = if (shots.isEmpty()) "Queue item" else "Queue item (${shots.size} photos)",
-            onClick = { viewModel.queueItem() },
+            onClick = {
+                val count = shots.size
+                viewModel.queueItem()
+                scope.launch {
+                    snackbar.showSnackbar(
+                        if (count == 1) "Queued 1 photo — it'll appear in Review."
+                        else "Queued $count photos — it'll appear in Review.",
+                    )
+                }
+            },
             enabled = shots.isNotEmpty(),
             gradient = if (shots.isNotEmpty()) CrateTheme.colors.heroGradient else null,
             modifier = Modifier.fillMaxWidth(),
@@ -191,6 +209,11 @@ fun CaptureScreen(
                 onDiscard = { viewModel.discard(entry.id) },
             )
         }
+    }
+    SnackbarHost(
+        hostState = snackbar,
+        modifier = Modifier.align(Alignment.BottomCenter),
+    )
     }
 }
 

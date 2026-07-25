@@ -468,3 +468,12 @@ additive `HomeViewModel` + `SettingsViewModel.user` (both on existing endpoints)
   rhythm — 8dp between related lines, ~12dp before section transitions, 4dp title/badge
   grouping (DraftCard, MessageCard, Detail panels, WeightConfirmCard/LabelBought, Settings
   cards). Baselines re-recorded again.
+- **Polish round (same day):** (1) price-strategy cards are full-width rows (name left,
+  mono price right) — the half-width pair wrapped "Patient" on-device; (2) freshness:
+  `util/OnResumeEffect` (back-stack-entry lifecycle, skips the synthetic first ON_RESUME)
+  refreshes Home/Review/Registry/Inbox on every tab revisit, plus `PulseRefreshBox`
+  pull-to-refresh on the three list screens (additive `refreshing` StateFlows; Registry
+  refresh keeps content on screen — only a filter change shows the spinner); (3) queueing
+  a capture confirms via snackbar; (4) tab navigation anchors `popUpTo(Home)` instead of
+  the graph start (Gate pops itself, so the old anchor was a no-op and tabs piled up on
+  the back stack — back now always lands on Home, then exits).

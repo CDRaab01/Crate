@@ -20,17 +20,22 @@ class InboxViewModel @Inject constructor(
     private val _messages = MutableStateFlow<UiState<List<MessageDto>>>(UiState.Loading)
     val messages: StateFlow<UiState<List<MessageDto>>> = _messages
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing
+
     init {
         refresh()
     }
 
     fun refresh() {
         viewModelScope.launch {
+            _refreshing.value = true
             _messages.value = try {
                 UiState.Success(api.messages())
             } catch (e: Exception) {
                 UiState.Error(e.message ?: "Couldn't load messages")
             }
+            _refreshing.value = false
         }
     }
 

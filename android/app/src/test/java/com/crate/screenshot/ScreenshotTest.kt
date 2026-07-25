@@ -160,7 +160,7 @@ private fun ReviewScene() {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SectionHeader(label = "Review stack", channel = CrateTheme.colors.copper.base)
+        Text("Review", style = MaterialTheme.typography.headlineSmall)
         DraftCard(
             item = templatedDraft,
             onSave = { _, _ -> },

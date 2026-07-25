@@ -23,23 +23,30 @@ class ItemsViewModel @Inject constructor(
     private val _filter = MutableStateFlow<String?>(null)
     val filter: StateFlow<String?> = _filter
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing
+
     init {
         refresh()
     }
 
     fun setFilter(status: String?) {
         _filter.value = status
+        // A filter change replaces the list wholesale — show the spinner.
+        _items.value = UiState.Loading
         refresh()
     }
 
+    /** Keeps current content on screen while refetching (resume/pull-to-refresh). */
     fun refresh() {
         viewModelScope.launch {
-            _items.value = UiState.Loading
+            _refreshing.value = true
             _items.value = try {
                 UiState.Success(api.listItems(status = _filter.value))
             } catch (e: Exception) {
                 UiState.Error(e.message ?: "Couldn't load items")
             }
+            _refreshing.value = false
         }
     }
 

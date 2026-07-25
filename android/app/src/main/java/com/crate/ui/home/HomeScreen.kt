@@ -38,6 +38,7 @@ import com.crate.ui.components.CrateWordmark
 import com.crate.ui.items.itemPhotoUrl
 import com.crate.ui.items.statusColor
 import com.crate.ui.theme.CrateTheme
+import com.crate.util.OnResumeEffect
 import design.pulse.ui.components.ChannelDot
 import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.HeroPanel
@@ -54,6 +55,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val stats by viewModel.stats.collectAsState()
+    OnResumeEffect { viewModel.refresh() }
     HomeContent(
         stats = stats,
         onSettings = onSettings,
