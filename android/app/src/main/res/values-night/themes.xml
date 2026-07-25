@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches DarkBackground (PulseInk) so the launch frame isn't a light flash in dark mode. -->
+    <style name="Theme.Crate" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0B0D10</item>
+    </style>
+</resources>

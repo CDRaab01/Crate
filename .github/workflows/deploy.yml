@@ -1,0 +1,86 @@
+name: Deploy
+
+# Redeploys the self-hosted Crate server (Windows + Docker Desktop) on a
+# self-hosted GitHub Actions runner. The runner long-polls GitHub *outbound*, so
+# there are no inbound ports to open on the home network. Crate itself is
+# tailnet-only (Tailscale Serve) — no cloudflared, no public hostname.
+#
+# Auto-deploy fires only after the CI workflow goes green on `main`
+# (workflow_run), so a broken commit never ships. workflow_dispatch is a manual
+# button that doubles as a rollback lever (pass a previous SHA in `ref`).
+#
+# Setup notes live in deploy/README.md.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA or branch to deploy (default: origin/main). Use a prior SHA to roll back."
+        required: false
+        default: "origin/main"
+
+# Never let two deploys run at once; queue the second instead of colliding.
+concurrency:
+  group: crate-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Redeploy server
+    # The `crate` label is assigned when the runner is registered on the host.
+    runs-on: [self-hosted, crate]
+    # Manual runs always proceed; automatic runs require a successful CI run on main
+    # that was triggered by a push (NOT the weekly `schedule:` bit-rot run — that must
+    # never ship a deploy).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    steps:
+      # No actions/checkout: we deploy the canonical clone on the host
+      # (vars.CRATE_DIR), not the runner's ephemeral _work directory. That clone
+      # owns the .env file and the pgdata/photos Docker volumes.
+      #
+      # shell: powershell is the built-in Windows PowerShell (5.1) — no PowerShell 7
+      # (pwsh) install required on the host. GitHub context is passed via env (not
+      # ${{ }} interpolated into code) so values can't break out of the script.
+      - name: Redeploy
+        shell: powershell
+        env:
+          CRATE_DIR: ${{ vars.CRATE_DIR }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:CRATE_DIR)) {
+            throw "CRATE_DIR Actions variable is not set. See deploy/README.md."
+          }
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') { $ref = $env:INPUT_REF }
+          else { $ref = $env:WORKFLOW_SHA }
+          if ([string]::IsNullOrWhiteSpace($ref)) { $ref = 'origin/main' }
+          Write-Host "Deploying ref: $ref"
+          & "$env:CRATE_DIR\deploy\redeploy.ps1" -Ref $ref
+
+      # Post-deploy synthetic smoke: proves SSO auth + DB read/write actually work against the
+      # just-deployed server, not just that /health is up. Crate is SSO-only, so the smoke mints
+      # an aud="suite" token via dragonfly-id's POST /smoke/token (CRATE_SMOKE_CLIENT_ID/SECRET
+      # come from the deployed .env inside the container), trades it at /auth/suite, and exercises
+      # an authenticated read. A non-zero exit fails the deploy run.
+      - name: Post-deploy smoke
+        shell: powershell
+        env:
+          CRATE_DIR: ${{ vars.CRATE_DIR }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $proj = $env:CRATE_DIR
+          # Run the smoke INSIDE the server container (python is there; the runner has no host
+          # python on PATH), hitting the app on its internal port 8000.
+          docker compose -f "$proj\docker-compose.yml" cp "$proj\scripts\synthetic_smoke.py" server:/tmp/smoke.py
+          if ($LASTEXITCODE -ne 0) { throw "copying smoke script into container failed" }
+          docker compose -f "$proj\docker-compose.yml" exec -T -e CRATE_URL=http://localhost:8000 server python /tmp/smoke.py
+          if ($LASTEXITCODE -ne 0) { throw "post-deploy smoke FAILED" }

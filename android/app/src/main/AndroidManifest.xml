@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Read suite connection config from the Dragonfly hub. Granted only because all suite
+         apps share one signing key; harmless if Dragonfly isn't installed. -->
+    <uses-permission android:name="com.dragonfly.permission.READ_SUITE_CONFIG" />
+
+    <!-- API 30+ package visibility: needed to resolve Dragonfly's ContentProvider. -->
+    <queries>
+        <package android:name="com.dragonfly" />
+    </queries>
+
+    <application
+        android:name=".CrateApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Crate"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Crate">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- AppAuth themes its AuthorizationManagementActivity as AppCompat but leaves
+             RedirectUriReceiverActivity to inherit the app theme, which isn't AppCompat →
+             it can crash on the redirect ("You need to use a Theme.AppCompat theme"). Force an
+             AppCompat translucent theme on it (suite-wide manifest landmine — do not remove). -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
+            tools:node="merge" />
+    </application>
+
+</manifest>

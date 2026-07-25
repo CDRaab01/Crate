@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+*.env
+!.env.example
+
+# Android
+.gradle/
+*.iml
+.idea/
+.vscode/
+*.swp
+android/app/build/
+android/local.properties
+*.jks
+*.apk
+*.aab
+
+# System
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+
+# never commit .env backups (they hold live secrets; timestamped .bak slips past *.env)
+.env.bak*
+*.env.bak-*

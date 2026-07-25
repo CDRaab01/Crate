@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches LightBackground so the launch frame isn't a white flash. -->
+    <style name="Theme.Crate" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF4F6F8</item>
+    </style>
+</resources>

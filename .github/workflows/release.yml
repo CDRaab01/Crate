@@ -1,0 +1,128 @@
+name: Release
+
+# Automatic release. Any push to main that changes the Android app cuts a signed release APK,
+# generates version.json, and publishes a GitHub Release — so shipping to devices is just pushing
+# to main. Dragonfly (the suite hub) polls releases/latest and diffs versionCode.
+#
+# versionCode = epoch minutes: monotonic across workflow changes and always far above any prior
+# run-number-based code, so a fresh release never looks like a downgrade to Android or the hub.
+# versionName = the app's major.minor from build.gradle + the commit count (readable, monotonic).
+# The jobs check the repo out into Crate/ and the sibling Pulse repo into Pulse/ so the composite
+# build's includeBuild("../../Pulse") resolves.
+# Signs with the CI release key when the KEYSTORE_* secrets are set; else the committed stable key.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: "Android — Unit Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: Crate/android
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: Crate
+      - uses: actions/checkout@v7
+        with:
+          repository: CDRaab01/Pulse
+          path: Pulse
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "server.url=${{ vars.CRATE_SERVER_URL || 'https://dragonfly.tail2ce561.ts.net:8446/' }}" >> local.properties
+      - run: ./gradlew :app:testDebugUnitTest --no-daemon -PexcludeScreenshots
+
+  release:
+    name: "Android — Release"
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: Crate/android
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: Crate
+          fetch-depth: 0 # full history so `git rev-list --count` gives the commit count
+      - uses: actions/checkout@v7
+        with:
+          repository: CDRaab01/Pulse
+          path: Pulse
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "server.url=${{ vars.CRATE_SERVER_URL || 'https://dragonfly.tail2ce561.ts.net:8446/' }}" >> local.properties
+      - name: Derive version
+        id: version
+        run: |
+          BASE=$(sed -n 's/.*VERSION_NAME") ?: "\([0-9]*\.[0-9]*\).*/\1/p' app/build.gradle.kts)
+          if [ -z "$BASE" ]; then echo "::error::could not read major.minor from build.gradle.kts"; exit 1; fi
+          COMMITS=$(git rev-list --count HEAD)
+          CODE=$(( $(date +%s) / 60 ))
+          echo "name=$BASE.$COMMITS" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Releasing $BASE.$COMMITS (versionCode $CODE)"
+      - name: Build signed release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > app/keystore.jks
+            export KEYSTORE_PATH=keystore.jks
+            echo "Signing with the CI release key."
+          else
+            echo "No KEYSTORE_BASE64 secret; signing with the committed stable key."
+          fi
+          ./gradlew :app:assembleRelease --no-daemon
+      - name: Assert signing identity
+        # Guard against a silent key change: if the KEYSTORE_* secrets ever go missing the build
+        # would fall back to a different (committed) key, producing an APK that can't install over
+        # existing users. Pin the known-good suite signer cert and fail the release if it differs.
+        run: |
+          EXPECTED=5a596c9ea21bfaddae572a66514553c0f8c6db4ed796deabe4f56c9040c2cf8a
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          ACTUAL=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk \
+            | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Signing key changed (expected $EXPECTED, got $ACTUAL). Refusing to publish — it would be uninstallable over existing installs. If this key change is intentional, update EXPECTED here."
+            exit 1
+          fi
+          echo "Signing identity verified: $ACTUAL"
+      - name: Stage APK + version.json for Dragonfly
+        run: |
+          APK=crate-v${{ steps.version.outputs.name }}.apk
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          printf '{"versionCode": %d, "versionName": "%s", "sha256": "%s", "minSdk": 26}\n' \
+            "${{ steps.version.outputs.code }}" "${{ steps.version.outputs.name }}" "$SHA256" > version.json
+          cat version.json
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          generate_release_notes: true
+          files: |
+            Crate/android/crate-v${{ steps.version.outputs.name }}.apk
+            Crate/android/version.json

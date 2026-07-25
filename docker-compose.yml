@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Credentials default to crate/crate for local use; override via the root .env to
+    # rotate. Must stay in sync with DATABASE_URL below (same variables).
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crate}
+      POSTGRES_DB: ${POSTGRES_DB:-crate}
+    # Host port 5436: 5432-5435 belong to Spotter/Plate/Cookbook/dragonfly-id on this host.
+    ports:
+      - "127.0.0.1:5436:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crate} -d ${POSTGRES_DB:-crate}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - ./server/.env
+    environment:
+      # Reach Postgres over the compose network; overrides DATABASE_URL from .env.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-crate}:${POSTGRES_PASSWORD:-crate}@db:5432/${POSTGRES_DB:-crate}
+      # Deploy stamp surfaced by GET /version. deploy/redeploy.* exports these before
+      # `compose up`; default to "unknown" for a plain manual `docker compose up`.
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILT_AT: ${BUILT_AT:-unknown}
+      # Suite SSO — public, non-secret values pinned here rather than only in .env: Compose
+      # doesn't reload env_file content on `up`, so an env_file-only flag gets dropped when a
+      # redeploy recreates the container without re-reading .env, silently 404ing /auth/suite.
+      # Crate is SSO-only, so losing these would mean NO login path at all.
+      SUITE_JWKS_URL: https://id.dragonflymedia.org/.well-known/jwks.json
+      SUITE_ISSUER: https://id.dragonflymedia.org
+    volumes:
+      # Item photos (originals + cleaned) live on the host, not in the container — they must
+      # survive redeploys. The DB stores paths only.
+      - photos:/data/photos
+    depends_on:
+      db:
+        condition: service_healthy
+    # Published on localhost only. Host port 8005: 8000-8004 belong to
+    # Spotter/Plate/posterizarr/Cookbook/dragonfly-id. Crate is tailnet-only — NO cloudflared
+    # service, no `tunnel` profile: it is reached via Tailscale Serve on the host (it handles
+    # buyer addresses and money; keep it off the public internet).
+    ports:
+      - "127.0.0.1:8005:8000"
+
+volumes:
+  pgdata:
+  photos:
