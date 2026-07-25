@@ -87,5 +87,16 @@ class Settings(BaseSettings):
     # Order/message poller cadence; 0 disables the scheduler entirely (tests, CI).
     poll_interval_minutes: int = 15
 
+    # Shippo (test mode key in dev; mocked in CI). Unset ⇒ shipping endpoints 503
+    # (Spoonacular precedent). The ship-from address is required for rate quotes.
+    shippo_api_key: str | None = None
+    shippo_base_url: str = "https://api.goshippo.com"
+    ship_from_name: str | None = None
+    ship_from_street1: str | None = None
+    ship_from_city: str | None = None
+    ship_from_state: str | None = None
+    ship_from_zip: str | None = None
+    ship_from_country: str = "US"
+
 
 settings = Settings()

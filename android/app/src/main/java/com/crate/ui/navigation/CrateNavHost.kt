@@ -15,6 +15,7 @@ import com.crate.ui.items.ItemDetailScreen
 import com.crate.ui.items.ItemsScreen
 import com.crate.ui.review.ReviewScreen
 import com.crate.ui.settings.SettingsScreen
+import com.crate.ui.ship.ShipScreen
 
 @Composable
 fun CrateNavHost(
@@ -65,7 +66,12 @@ fun CrateNavHost(
         composable(Screen.Items.route) {
             ItemsScreen(onItem = { id -> navController.navigate(Screen.ItemDetail.withId(id)) })
         }
-        composable(Screen.ItemDetail.route) { ItemDetailScreen() }
+        composable(Screen.ItemDetail.route) {
+            ItemDetailScreen(
+                onShip = { id -> navController.navigate(Screen.Ship.withId(id)) },
+            )
+        }
+        composable(Screen.Ship.route) { ShipScreen() }
         composable(Screen.Inbox.route) { InboxScreen() }
         composable(Screen.Settings.route) {
             SettingsScreen(

@@ -2,6 +2,7 @@
 effects, ntfy pings. eBay + ntfy fully mocked (CLAUDE.md §8)."""
 
 import datetime
+import uuid
 from decimal import Decimal
 
 import httpx
@@ -54,7 +55,7 @@ async def _seed_active_item(user_id) -> Item:
             condition="good",
             status="active",
             chosen_price=Decimal("15.00"),
-            ebay_listing_id="110000001",
+            ebay_listing_id=f"11000{uuid.uuid4().hex[:8]}",
         )
         db.add(item)
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -73,7 +74,7 @@ async def _seed_active_item(user_id) -> Item:
         return item
 
 
-def orders_transport(item: Item) -> httpx.MockTransport:
+def orders_transport(item: Item, order_id: str) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         assert "/sell/fulfillment/v1/order" in request.url.path
         return httpx.Response(
@@ -81,7 +82,7 @@ def orders_transport(item: Item) -> httpx.MockTransport:
             json={
                 "orders": [
                     {
-                        "orderId": "ORDER-42",
+                        "orderId": order_id,
                         "buyer": {"username": "fish4life"},
                         "pricingSummary": {"total": {"value": "17.55"}},
                         "lineItems": [{"sku": str(item.id)}],
@@ -102,7 +103,7 @@ def orders_transport(item: Item) -> httpx.MockTransport:
                             }
                         ],
                     },
-                    {"orderId": "ORDER-43", "lineItems": [{"sku": "not-a-crate-sku"}]},
+                    {"orderId": f"{order_id}-junk", "lineItems": [{"sku": "not-a-crate-sku"}]},
                 ]
             },
         )
@@ -112,8 +113,9 @@ def orders_transport(item: Item) -> httpx.MockTransport:
 
 async def test_sale_detected_once_and_side_effects(auth_client, ntfy_recorder):
     item = await _seed_active_item(auth_client.user_id)
+    order_id = f"ORDER-{uuid.uuid4().hex[:10]}"
 
-    async with httpx.AsyncClient(transport=orders_transport(item)) as http:
+    async with httpx.AsyncClient(transport=orders_transport(item, order_id)) as http:
         async with AsyncSessionLocal() as db:
             assert await fulfillment.poll_orders(db, auth_client.user_id, client=http) == 1
         # Second poll re-sees the same order — idempotent by ebay_order_id.
@@ -121,7 +123,7 @@ async def test_sale_detected_once_and_side_effects(auth_client, ntfy_recorder):
             assert await fulfillment.poll_orders(db, auth_client.user_id, client=http) == 0
 
     async with AsyncSessionLocal() as db:
-        sale = (await db.execute(select(Sale).where(Sale.ebay_order_id == "ORDER-42"))).scalar_one()
+        sale = (await db.execute(select(Sale).where(Sale.ebay_order_id == order_id))).scalar_one()
         assert sale.sale_price == Decimal("17.55")
         assert sale.buyer_username == "fish4life"
         assert sale.buyer_address["name"] == "Pat Buyer"
@@ -146,18 +148,23 @@ async def test_sale_detected_once_and_side_effects(auth_client, ntfy_recorder):
     assert r.json()["buyer_address"]["name"] == "Pat Buyer"
 
 
-MESSAGES_XML = """<?xml version="1.0"?>
-<GetMyMessagesResponse><Messages>
-<Message><MessageID>MSG-1</MessageID><Subject>Will this ship to Alaska?</Subject>
-<ItemID>110000001</ItemID></Message>
-<Message><MessageID>MSG-2</MessageID><Subject>Return request for order</Subject></Message>
-</Messages></GetMyMessagesResponse>"""
+def messages_xml(msg1: str, msg2: str, listing_id: str) -> str:
+    return (
+        '<?xml version="1.0"?>'
+        "<GetMyMessagesResponse><Messages>"
+        f"<Message><MessageID>{msg1}</MessageID><Subject>Will this ship to Alaska?</Subject>"
+        f"<ItemID>{listing_id}</ItemID></Message>"
+        f"<Message><MessageID>{msg2}</MessageID><Subject>Return request for order</Subject></Message>"
+        "</Messages></GetMyMessagesResponse>"
+    )
 
 
 async def test_messages_flagged_once_and_inbox(auth_client, ntfy_recorder):
     item = await _seed_active_item(auth_client.user_id)
+    msg1, msg2 = f"MSG-{uuid.uuid4().hex[:10]}", f"MSG-{uuid.uuid4().hex[:10]}"
+    xml = messages_xml(msg1, msg2, item.ebay_listing_id)
 
-    transport = httpx.MockTransport(lambda req: httpx.Response(200, text=MESSAGES_XML))
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, text=xml))
     async with httpx.AsyncClient(transport=transport) as http:
         async with AsyncSessionLocal() as db:
             assert await fulfillment.poll_messages(db, auth_client.user_id, client=http) == 2
@@ -170,11 +177,11 @@ async def test_messages_flagged_once_and_inbox(auth_client, ntfy_recorder):
             .scalars()
             .all()
         )
-        by_id = {m.ebay_message_id: m for m in flagged}
-        assert by_id["MSG-1"].item_id == item.id  # matched via ebay_listing_id
-        assert by_id["MSG-1"].message_type == "question"
-        assert by_id["MSG-2"].item_id is None  # pre-sale / unmatched
-        assert by_id["MSG-2"].message_type == "return_request"
+        by_id = {m.ebay_message_id: m for m in flagged if m.ebay_message_id in (msg1, msg2)}
+        assert by_id[msg1].item_id == item.id  # matched via ebay_listing_id
+        assert by_id[msg1].message_type == "question"
+        assert by_id[msg2].item_id is None  # pre-sale / unmatched
+        assert by_id[msg2].message_type == "return_request"
 
     # Inbox + resolve round-trip.
     r = await auth_client.get("/messages", params={"unresolved_only": "true"})

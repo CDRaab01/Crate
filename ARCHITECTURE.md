@@ -123,6 +123,27 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
 
+## Shipping (Phase 7, as built — Shippo test mode, mocked in CI)
+
+- **The confirm gate** (locked decision): `POST /items/{id}/confirm-weight` stores the
+  human-checked weight/dims (`weight_confirmed=true`); `GET /items/{id}/rates` 409s
+  until then — rates are quoted only against confirmed numbers because wrong-weight
+  labels cost real money.
+- **Rates** (`services/shippo.py`): one synchronous Shippo shipment per quote
+  (ship-from from `SHIP_FROM_*` env, buyer address from the sale row, parcel from the
+  confirmed numbers); the endpoint sorts per `user_settings.shipping_preference`
+  (cheapest = amount; fastest = estimated_days then amount). Unconfigured ⇒ 503
+  (Spoonacular precedent).
+- **Label purchase** (`POST /items/{id}/buy-label`, REAL MONEY, explicit tap only,
+  double-buy blocked by ship_status): Shippo transaction (SUCCESS-checked) → sale row
+  gets tracking/label_url + the QUOTED carrier/service/cost (the transaction echoes
+  the rate only as an id, so the client sends the picked quote back) → tracking pushed
+  to the eBay order (`fulfillment.push_tracking`, GET order for lineItemIds →
+  createShippingFulfillment) → lifecycle sold→shipped + ntfy. A failed tracking push
+  logs + warns in the ntfy note but never loses the bought label.
+- Client: Ship screen (pre-filled editable weight/dims → confirm → sorted rate cards →
+  Buy → label PDF open), reached from the sold item's Sale card.
+
 ## Sale detection + buyer messages + ntfy (Phase 6, as built)
 
 - **Poller** (`services/poller.py`, started from the app lifespan): every

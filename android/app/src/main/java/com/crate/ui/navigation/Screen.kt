@@ -16,9 +16,13 @@ sealed class Screen(val route: String) {
         fun withId(id: String) = "items/$id"
     }
 
+    data object Ship : Screen("ship/{itemId}") {
+        fun withId(id: String) = "ship/$id"
+    }
+
     companion object {
         /** Every route, for the uniqueness guard test. */
         val all: List<Screen> =
-            listOf(Gate, Login, Home, Capture, Review, Items, ItemDetail, Settings, Inbox)
+            listOf(Gate, Login, Home, Capture, Review, Items, ItemDetail, Settings, Inbox, Ship)
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,10 +31,12 @@ import com.crate.data.remote.ItemDto
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
 
 @Composable
 fun ItemDetailScreen(
+    onShip: (String) -> Unit = {},
     viewModel: ItemDetailViewModel = hiltViewModel(),
 ) {
     val itemState by viewModel.item.collectAsState()
@@ -50,7 +53,7 @@ fun ItemDetailScreen(
             PanelCard { Text(state.message, color = MaterialTheme.colorScheme.error) }
         }
 
-        is UiState.Success -> Detail(state.data, priceEvents, sale)
+        is UiState.Success -> Detail(state.data, priceEvents, sale, onShip)
     }
 }
 
@@ -59,6 +62,7 @@ private fun Detail(
     item: ItemDto,
     priceEvents: List<com.crate.data.remote.PriceEventDto>,
     sale: com.crate.data.remote.SaleDto?,
+    onShip: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -156,6 +160,13 @@ private fun Detail(
                         address.toString(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (item.status == "sold") {
+                    PulseButton(
+                        text = "Ship it",
+                        onClick = { onShip(item.id) },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }

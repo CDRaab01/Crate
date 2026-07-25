@@ -98,6 +98,30 @@ data class MessageDto(
 )
 
 @Serializable
+data class RateDto(
+    @SerialName("rate_id") val rateId: String,
+    val provider: String,
+    val service: String,
+    val amount: String,
+    val currency: String = "USD",
+    @SerialName("estimated_days") val estimatedDays: Int? = null,
+)
+
+@Serializable
+data class WeightConfirmRequest(
+    @SerialName("weight_oz") val weightOz: String,
+    @SerialName("dims_in") val dimsIn: Map<String, Double>,
+)
+
+@Serializable
+data class BuyLabelRequest(
+    @SerialName("rate_id") val rateId: String,
+    val provider: String,
+    val service: String,
+    val amount: String,
+)
+
+@Serializable
 data class EbayConnectDto(
     @SerialName("authorize_url") val authorizeUrl: String,
 )

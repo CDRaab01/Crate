@@ -63,4 +63,13 @@ interface ApiService {
 
     @POST("messages/{id}/resolve")
     suspend fun resolveMessage(@Path("id") id: String): MessageDto
+
+    @POST("items/{id}/confirm-weight")
+    suspend fun confirmWeight(@Path("id") id: String, @Body req: WeightConfirmRequest): ItemDto
+
+    @GET("items/{id}/rates")
+    suspend fun rates(@Path("id") id: String): List<RateDto>
+
+    @POST("items/{id}/buy-label")
+    suspend fun buyLabel(@Path("id") id: String, @Body req: BuyLabelRequest): SaleDto
 }

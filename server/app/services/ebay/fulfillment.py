@@ -201,6 +201,53 @@ async def poll_messages(db: AsyncSession, user_id, client: httpx.AsyncClient | N
     return new_messages
 
 
+async def push_tracking(
+    db: AsyncSession,
+    user_id,
+    order_id: str,
+    tracking_number: str,
+    carrier: str,
+    client: httpx.AsyncClient | None = None,
+) -> None:
+    """Attach tracking to the eBay order (side effect of a user-initiated label purchase —
+    one of the two sanctioned unattended write paths, CLAUDE.md §9)."""
+    token = await oauth.user_token(db, user_id, client=client)
+    owns = client is None
+    active = client or httpx.AsyncClient(timeout=30.0)
+    try:
+        order_resp = await active.get(
+            f"{oauth.api_host()}/sell/fulfillment/v1/order/{order_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        order_resp.raise_for_status()
+        line_item_ids = [
+            {"lineItemId": li["lineItemId"]}
+            for li in order_resp.json().get("lineItems", [])
+            if li.get("lineItemId")
+        ]
+        resp = await active.post(
+            f"{oauth.api_host()}/sell/fulfillment/v1/order/{order_id}/shipping_fulfillment",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "lineItems": line_item_ids,
+                "shippedDate": datetime.datetime.now(datetime.timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.000Z"
+                ),
+                "shippingCarrierCode": carrier,
+                "trackingNumber": tracking_number,
+            },
+        )
+        if resp.status_code not in (200, 201, 204):
+            raise httpx.HTTPStatusError(
+                f"tracking push rejected ({resp.status_code})",
+                request=resp.request,
+                response=resp,
+            )
+    finally:
+        if owns:
+            await active.aclose()
+
+
 def _tag(xml_fragment: str, tag: str) -> str | None:
     match = re.search(rf"<{tag}>([^<]*)</{tag}>", xml_fragment)
     return match.group(1).strip() if match else None
