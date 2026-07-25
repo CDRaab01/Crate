@@ -77,8 +77,35 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
   `crate-smoke@dragonflymedia.org` in the `SMOKE_SUBJECT_EMAILS` compose pin (the
   `crate-smoke` SMOKE_CLIENTS credential is set in the deployed `.env` by the owner).
 
-## Data model
+## Auth (Phase 1, as built)
 
-Phase 1 lands the full §4 schema from CLAUDE.md (users, items, item_photos, sales,
-buyer_messages, duplicate_templates, price_events, ebay_credentials, settings). This
-section will be filled in as migrations land.
+`POST /auth/suite` (10/min) validates an RS256 Dragonfly suite token against the identity
+server's JWKS (cached, refetch-on-unknown-kid), find-or-creates the local user **by email**
+(no password column exists anywhere — SSO-only), seeds the per-user `user_settings` row,
+and returns Crate's own HS256 access/refresh pair. `POST /auth/refresh` (10/min) rotates
+the pair; `GET /users/me` is the authenticated identity read. Everything lives in
+`app/services/suite_auth.py` + `app/security.py`; unset `SUITE_JWKS_URL`/`SUITE_ISSUER` ⇒
+404 (no login path — the flags are compose-pinned in production).
+`scripts/synthetic_smoke.py` is the deploy gate: dragonfly-id `/smoke/token`
+(crate-smoke credential) → `/auth/suite` → `/users/me`.
+
+## Data model (migration 0001 — the full CLAUDE.md §4 schema)
+
+- `users` — id, email (unique), name, created_at. No password hash (SSO-only).
+- `items` — the lifecycle row: identification fields all nullable (a fresh capture is just
+  photos), status `draft|active|sold|shipped|returned|delisted` (transitions live in the
+  item service only), two computed prices + chosen_price, eBay listing/offer ids,
+  weight/dims estimate + weight_confirmed, template_id → duplicate_templates.
+- `item_photos` — ordered per item; original_path/cleaned_path on the photos volume
+  (DB stores paths only), ebay_url after EPS upload. Cascade with the item.
+- `sales` — one per eBay order (ebay_order_id unique): price/fees/date/buyer + address
+  JSON, ship_status `pending|label_bought|shipped|delivered`, tracking/carrier/label.
+- `buyer_messages` — flagged inbox rows (item nullable — pre-sale questions), unique
+  ebay_message_id for poller idempotency.
+- `duplicate_templates` — normalized-text signature (brand+model+category tokens, not
+  embeddings) + reusable title/description/category, use_count/last_used.
+- `price_events` — audit trail for every drop (auto_drop|manual|floor_reached).
+- `ebay_credentials` — one row per user; access/refresh tokens stored encrypted
+  (Fernet, Phase 5), sandbox|production environment tag.
+- `user_settings` — the drop policy (enabled/interval/step), shipping preference,
+  ntfy topic override; seeded at first login.

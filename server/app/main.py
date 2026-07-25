@@ -7,6 +7,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
+from app.routers import auth, suite_auth, users
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
@@ -57,6 +58,11 @@ async def security_headers(request: Request, call_next):
     if settings.hsts_enabled:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
+
+
+app.include_router(auth.router)
+app.include_router(suite_auth.router)
+app.include_router(users.router)
 
 
 @app.get("/health", tags=["health"])
