@@ -58,35 +58,46 @@ fun InboxScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
                     items(state.data, key = { it.id }) { message ->
-                        PanelCard {
-                            Text(
-                                message.messageType.replace('_', ' ').uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (message.messageType == "return_request") {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    CrateTheme.colors.attention.base
-                                },
-                            )
-                            Text(message.content, style = MaterialTheme.typography.bodyMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (!message.resolved) {
-                                    PulseButton(
-                                        text = "Mark resolved",
-                                        onClick = { viewModel.resolve(message.id) },
-                                        compact = true,
-                                    )
-                                } else {
-                                    Text(
-                                        "RESOLVED",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = CrateTheme.colors.sold.base,
-                                    )
-                                }
-                            }
-                        }
+                        MessageCard(
+                            message = message,
+                            onResolve = { viewModel.resolve(message.id) },
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MessageCard(
+    message: com.crate.data.remote.MessageDto,
+    onResolve: () -> Unit,
+) {
+    PanelCard {
+        Text(
+            message.messageType.replace('_', ' ').uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (message.messageType == "return_request") {
+                MaterialTheme.colorScheme.error
+            } else {
+                CrateTheme.colors.attention.base
+            },
+        )
+        Text(message.content, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!message.resolved) {
+                PulseButton(
+                    text = "Mark resolved",
+                    onClick = onResolve,
+                    compact = true,
+                )
+            } else {
+                Text(
+                    "RESOLVED",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CrateTheme.colors.sold.base,
+                )
             }
         }
     }

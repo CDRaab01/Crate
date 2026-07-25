@@ -3,6 +3,8 @@ package com.crate.ui.review
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -99,8 +101,9 @@ fun ReviewScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DraftCard(
+internal fun DraftCard(
     item: ItemDto,
     onSave: (ItemUpdateRequest, (Boolean) -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -181,7 +184,10 @@ private fun DraftCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = CrateTheme.colors.pricing.base,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 item.quickSalePrice?.let { price ->
                     PulseButton(
                         text = if (item.chosenPrice == price) "✓ Quick $$price" else "Quick $$price",

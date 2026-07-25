@@ -431,8 +431,12 @@ is mocked in CI per §8.
      `crate-smoke` secret in dragonfly-id's `SMOKE_CLIENTS` (+ same value in Crate's
      `.env` for the smoke), Dragonfly `ServiceRegistry` row once the URL is real.
   4. On-device pass (camera flow, AppAuth redirect, label PDF share) — CI builds are
-     the gate until the phone is in hand; Roborazzi baselines unrecorded (the
-     `workflow_dispatch` screenshots job exists, suite pattern).
+     the gate until the phone is in hand. Roborazzi baselines **recorded 2026-07-25**
+     (`com.crate.screenshot.ScreenshotTest`, 12 PNGs under `android/app/screenshots/`:
+     Home/Login/Review/ItemDetail/Ship/Inbox × light+dark; the `workflow_dispatch`
+     screenshots job re-runs them, suite pattern). Recording them caught and fixed two
+     real UI defects: the review card's price-strategy row overflowed (now `FlowRow`)
+     and the Sale card printed the buyer address as raw JSON (now a readable line).
 - **Deferred (post-v1, per §1):** `/cross-app/summary` for the Dragonfly digest
   ("Money" card), buyer-message full bodies + in-app replies, auction format,
   international shipping, multi-marketplace, bookkeeping.

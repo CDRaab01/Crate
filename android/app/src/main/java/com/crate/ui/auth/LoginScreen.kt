@@ -49,6 +49,18 @@ fun LoginScreen(
         if (signInState is UiState.Success) onSignedIn()
     }
 
+    LoginContent(
+        signInState = signInState,
+        onSignIn = { launcher.launch(viewModel.suiteAuthorizeIntent()) },
+    )
+}
+
+/** Stateless visual layer — also rendered by the Roborazzi screenshot tests. */
+@Composable
+internal fun LoginContent(
+    signInState: UiState<Unit>,
+    onSignIn: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -84,7 +96,7 @@ fun LoginScreen(
             else -> {
                 PulseButton(
                     text = "Sign in with Dragonfly",
-                    onClick = { launcher.launch(viewModel.suiteAuthorizeIntent()) },
+                    onClick = onSignIn,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (state is UiState.Error) {

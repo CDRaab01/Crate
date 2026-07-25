@@ -93,25 +93,7 @@ fun ShipScreen(
                                 channel = CrateTheme.colors.pricing.base,
                             )
                             rateState.data.forEach { rate ->
-                                PanelCard {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                "${rate.provider} · ${rate.service}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                            )
-                                            Text(
-                                                rate.estimatedDays?.let { "~$it days" } ?: "",
-                                                style = MaterialTheme.typography.bodySmall,
-                                            )
-                                        }
-                                        PulseButton(
-                                            text = "Buy $${rate.amount}",
-                                            onClick = { viewModel.buyLabel(rate) },
-                                            compact = true,
-                                        )
-                                    }
-                                }
+                                RateRow(rate = rate, onBuy = { viewModel.buyLabel(rate) })
                             }
                         }
                     }
@@ -130,7 +112,33 @@ fun ShipScreen(
 }
 
 @Composable
-private fun WeightConfirmCard(
+internal fun RateRow(
+    rate: com.crate.data.remote.RateDto,
+    onBuy: () -> Unit,
+) {
+    PanelCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${rate.provider} · ${rate.service}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    rate.estimatedDays?.let { "~$it days" } ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            PulseButton(
+                text = "Buy $${rate.amount}",
+                onClick = onBuy,
+                compact = true,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun WeightConfirmCard(
     item: ItemDto,
     onConfirm: (String, Double, Double, Double) -> Unit,
 ) {
@@ -191,7 +199,7 @@ private fun WeightConfirmCard(
 }
 
 @Composable
-private fun LabelBought(
+internal fun LabelBought(
     tracking: String,
     labelUrl: String?,
     onOpen: (String) -> Unit,

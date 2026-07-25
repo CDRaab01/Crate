@@ -33,6 +33,7 @@ import com.crate.util.UiState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import kotlinx.serialization.json.JsonPrimitive
 
 @Composable
 fun ItemDetailScreen(
@@ -65,7 +66,7 @@ fun ItemDetailScreen(
 }
 
 @Composable
-private fun Detail(
+internal fun Detail(
     item: ItemDto,
     priceEvents: List<com.crate.data.remote.PriceEventDto>,
     sale: com.crate.data.remote.SaleDto?,
@@ -165,8 +166,11 @@ private fun Detail(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 sale.buyerAddress?.let { address ->
+                    val readable = address.values.joinToString(", ") { value ->
+                        (value as? JsonPrimitive)?.content ?: value.toString()
+                    }
                     Text(
-                        address.toString(),
+                        readable,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
