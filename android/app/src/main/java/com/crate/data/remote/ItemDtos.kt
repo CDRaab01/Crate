@@ -70,6 +70,34 @@ data class PriceEventDto(
 )
 
 @Serializable
+data class SaleDto(
+    val id: String,
+    @SerialName("item_id") val itemId: String,
+    @SerialName("ebay_order_id") val ebayOrderId: String,
+    @SerialName("sale_price") val salePrice: String,
+    val fees: String? = null,
+    @SerialName("sale_date") val saleDate: String,
+    @SerialName("buyer_username") val buyerUsername: String,
+    @SerialName("buyer_address") val buyerAddress: kotlinx.serialization.json.JsonObject? = null,
+    @SerialName("ship_status") val shipStatus: String,
+    @SerialName("tracking_number") val trackingNumber: String? = null,
+    val carrier: String? = null,
+    val service: String? = null,
+    @SerialName("label_cost") val labelCost: String? = null,
+    @SerialName("label_url") val labelUrl: String? = null,
+)
+
+@Serializable
+data class MessageDto(
+    val id: String,
+    @SerialName("item_id") val itemId: String? = null,
+    @SerialName("message_type") val messageType: String,
+    val content: String,
+    @SerialName("flagged_at") val flaggedAt: String,
+    val resolved: Boolean,
+)
+
+@Serializable
 data class EbayConnectDto(
     @SerialName("authorize_url") val authorizeUrl: String,
 )

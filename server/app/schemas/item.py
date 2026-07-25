@@ -70,6 +70,25 @@ class ItemUpdate(BaseModel):
         return self.condition
 
 
+class SaleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    item_id: uuid.UUID
+    ebay_order_id: str
+    sale_price: Decimal
+    fees: Decimal | None
+    sale_date: datetime.datetime
+    buyer_username: str
+    buyer_address: dict
+    ship_status: str
+    tracking_number: str | None
+    carrier: str | None
+    service: str | None
+    label_cost: Decimal | None
+    label_url: str | None
+
+
 class CompOut(BaseModel):
     title: str
     price: Decimal

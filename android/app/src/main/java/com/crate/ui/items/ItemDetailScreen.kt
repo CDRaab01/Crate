@@ -38,6 +38,7 @@ fun ItemDetailScreen(
 ) {
     val itemState by viewModel.item.collectAsState()
     val priceEvents by viewModel.priceEvents.collectAsState()
+    val sale by viewModel.sale.collectAsState()
 
     when (val state = itemState) {
         is UiState.Loading, UiState.Idle -> Box(
@@ -49,12 +50,16 @@ fun ItemDetailScreen(
             PanelCard { Text(state.message, color = MaterialTheme.colorScheme.error) }
         }
 
-        is UiState.Success -> Detail(state.data, priceEvents)
+        is UiState.Success -> Detail(state.data, priceEvents, sale)
     }
 }
 
 @Composable
-private fun Detail(item: ItemDto, priceEvents: List<com.crate.data.remote.PriceEventDto>) {
+private fun Detail(
+    item: ItemDto,
+    priceEvents: List<com.crate.data.remote.PriceEventDto>,
+    sale: com.crate.data.remote.SaleDto?,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -130,6 +135,28 @@ private fun Detail(item: ItemDto, priceEvents: List<com.crate.data.remote.PriceE
                             color = CrateTheme.colors.attention.base,
                         )
                     }
+                }
+            }
+        }
+
+        if (sale != null) {
+            SectionHeader(label = "Sale", channel = CrateTheme.colors.sold.base)
+            PanelCard {
+                Text(
+                    "Sold to ${sale.buyerUsername} for $${sale.salePrice}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    "Ship status: ${sale.shipStatus.replace('_', ' ')}" +
+                        (sale.trackingNumber?.let { "  ·  $it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                sale.buyerAddress?.let { address ->
+                    Text(
+                        address.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

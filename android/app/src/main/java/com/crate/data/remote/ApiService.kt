@@ -54,4 +54,13 @@ interface ApiService {
 
     @GET("ebay/status")
     suspend fun ebayStatus(): EbayStatusDto
+
+    @GET("items/{id}/sale")
+    suspend fun itemSale(@Path("id") id: String): SaleDto
+
+    @GET("messages")
+    suspend fun messages(@Query("unresolved_only") unresolvedOnly: Boolean = false): List<MessageDto>
+
+    @POST("messages/{id}/resolve")
+    suspend fun resolveMessage(@Path("id") id: String): MessageDto
 }

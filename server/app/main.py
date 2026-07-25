@@ -7,15 +7,28 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
-from app.routers import auth, ebay, items, suite_auth, templates, users
+from contextlib import asynccontextmanager
+
+from app.routers import auth, ebay, items, messages, suite_auth, templates, users
+from app.services import poller
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # The 15-min order/message poller (no-op until eBay is configured; interval 0 in CI).
+    poller.start()
+    yield
+    poller.stop()
+
 
 # Interactive docs are handy locally but an unnecessary surface on a deployment.
 app = FastAPI(
     title="Crate API",
     version=APP_VERSION,
+    lifespan=lifespan,
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
@@ -66,6 +79,7 @@ app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(templates.router)
 app.include_router(ebay.router)
+app.include_router(messages.router)
 
 
 @app.get("/health", tags=["health"])

@@ -9,6 +9,7 @@ sealed class Screen(val route: String) {
     data object Review : Screen("review")
     data object Items : Screen("items")
     data object Settings : Screen("settings")
+    data object Inbox : Screen("inbox")
 
     data object ItemDetail : Screen("items/{itemId}") {
         const val ARG = "itemId"
@@ -18,6 +19,6 @@ sealed class Screen(val route: String) {
     companion object {
         /** Every route, for the uniqueness guard test. */
         val all: List<Screen> =
-            listOf(Gate, Login, Home, Capture, Review, Items, ItemDetail, Settings)
+            listOf(Gate, Login, Home, Capture, Review, Items, ItemDetail, Settings, Inbox)
     }
 }

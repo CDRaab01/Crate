@@ -10,6 +10,7 @@ import com.crate.ui.auth.AuthViewModel
 import com.crate.ui.auth.LoginScreen
 import com.crate.ui.capture.CaptureScreen
 import com.crate.ui.home.HomeScreen
+import com.crate.ui.inbox.InboxScreen
 import com.crate.ui.items.ItemDetailScreen
 import com.crate.ui.items.ItemsScreen
 import com.crate.ui.review.ReviewScreen
@@ -56,6 +57,7 @@ fun CrateNavHost(
                 onReview = { navController.navigate(Screen.Review.route) },
                 onItems = { navController.navigate(Screen.Items.route) },
                 onSettings = { navController.navigate(Screen.Settings.route) },
+                onInbox = { navController.navigate(Screen.Inbox.route) },
             )
         }
         composable(Screen.Capture.route) { CaptureScreen() }
@@ -64,6 +66,7 @@ fun CrateNavHost(
             ItemsScreen(onItem = { id -> navController.navigate(Screen.ItemDetail.withId(id)) })
         }
         composable(Screen.ItemDetail.route) { ItemDetailScreen() }
+        composable(Screen.Inbox.route) { InboxScreen() }
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onSignedOut = {

@@ -47,6 +47,10 @@ services:
       # Crate is SSO-only, so losing these would mean NO login path at all.
       SUITE_JWKS_URL: https://id.dragonflymedia.org/.well-known/jwks.json
       SUITE_ISSUER: https://id.dragonflymedia.org
+      # ntfy (non-secret → pinned here, not env_file): sale events, buyer messages, price
+      # drops. Empty = notifications silently off.
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-https://ntfy.sh}
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
     volumes:
       # Item photos (originals + cleaned) live on the host, not in the container — they must
       # survive redeploys. The DB stores paths only.

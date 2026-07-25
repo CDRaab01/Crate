@@ -26,6 +26,7 @@ fun HomeScreen(
     onReview: () -> Unit = {},
     onItems: () -> Unit = {},
     onSettings: () -> Unit = {},
+    onInbox: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -79,11 +80,19 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        PulseButton(
-            text = "Settings",
-            onClick = onSettings,
-            tonal = true,
-            compact = true,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(CrateTheme.spacing.md)) {
+            PulseButton(
+                text = "Inbox",
+                onClick = onInbox,
+                tonal = true,
+                compact = true,
+            )
+            PulseButton(
+                text = "Settings",
+                onClick = onSettings,
+                tonal = true,
+                compact = true,
+            )
+        }
     }
 }

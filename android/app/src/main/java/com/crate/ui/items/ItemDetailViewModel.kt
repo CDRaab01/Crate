@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.ItemDto
 import com.crate.data.remote.PriceEventDto
+import com.crate.data.remote.SaleDto
 import com.crate.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -27,21 +28,35 @@ class ItemDetailViewModel @Inject constructor(
     private val _priceEvents = MutableStateFlow<List<PriceEventDto>>(emptyList())
     val priceEvents: StateFlow<List<PriceEventDto>> = _priceEvents
 
+    private val _sale = MutableStateFlow<SaleDto?>(null)
+    val sale: StateFlow<SaleDto?> = _sale
+
     init {
         refresh()
     }
 
     fun refresh() {
         viewModelScope.launch {
-            _item.value = try {
+            val loaded = try {
                 UiState.Success(api.getItem(itemId))
             } catch (e: Exception) {
                 UiState.Error(e.message ?: "Couldn't load item")
             }
+            _item.value = loaded
             _priceEvents.value = try {
                 api.priceEvents(itemId)
             } catch (_: Exception) {
                 emptyList() // history is additive UI — its failure never blanks the item
+            }
+            val status = (loaded as? UiState.Success)?.data?.status
+            _sale.value = if (status in listOf("sold", "shipped")) {
+                try {
+                    api.itemSale(itemId)
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
             }
         }
     }

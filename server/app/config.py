@@ -79,5 +79,13 @@ class Settings(BaseSettings):
     # Unset ⇒ /ebay/connect 503s — tokens are never stored unencrypted.
     fernet_key: str | None = None
 
+    # ntfy (suite precedent from the Dragonfly digest): silently off when unset. Non-secret
+    # ⇒ pinned in compose environment:. Per-user topic override lives in user_settings.
+    ntfy_base_url: str | None = None
+    ntfy_topic: str | None = None
+
+    # Order/message poller cadence; 0 disables the scheduler entirely (tests, CI).
+    poll_interval_minutes: int = 15
+
 
 settings = Settings()

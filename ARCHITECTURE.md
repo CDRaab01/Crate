@@ -123,6 +123,27 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
 
+## Sale detection + buyer messages + ntfy (Phase 6, as built)
+
+- **Poller** (`services/poller.py`, started from the app lifespan): every
+  `POLL_INTERVAL_MINUTES` (15; 0 disables — CI/tests), for each connected user, pull
+  orders (Fulfillment API, last 7 days) and buyer-message headers (Trading
+  GetMyMessages, ReturnHeaders — subjects only in v1: Crate flags, it doesn't chat).
+  One user's failure logs and never kills the loop. Polls OUT only — no inbound
+  webhooks, consistent with tailnet-only.
+- **Idempotency contracts:** `sales.ebay_order_id` and `buyer_messages.ebay_message_id`
+  are unique — re-seeing the same order/message forever never duplicates. A new sale
+  stores the minimum buyer payload needed to ship (name/address/phone), drives
+  active→sold through the lifecycle service (which mints the duplicate template), and
+  pings ntfy (high priority).
+- **ntfy** (`services/notify.py`): silently off when unset (compose-pinned
+  NTFY_BASE_URL/NTFY_TOPIC), best-effort — a dead push service never breaks a poll.
+  Per-user topic override from `user_settings`.
+- Surfaces: `GET /messages` (+ `unresolved_only`), `POST /messages/{id}/resolve`,
+  `GET /items/{id}/sale` (buyer address + ship state for the Ship screen).
+- Client: Inbox screen (flag list, resolve; replies happen in the eBay app), sold-state
+  Sale card on item detail.
+
 ## eBay OAuth + posting (Phase 5, as built — sandbox-ready, mocked in CI)
 
 - **Seller OAuth** (`services/ebay/oauth.py`): GET `/ebay/connect` (auth) returns the

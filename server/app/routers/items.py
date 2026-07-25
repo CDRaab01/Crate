@@ -24,10 +24,11 @@ from app.database import get_db
 from app.limiter import limiter
 from app.models.item import ITEM_STATUSES, Item, ItemPhoto
 from app.models.price_event import PriceEvent
+from app.models.sale import Sale
 from app.pricing import browse
 from app.pricing import service as pricing_service
 from app.pricing.comps import compute_prices
-from app.schemas.item import CompOut, CompsOut, ItemOut, ItemUpdate, ScanAccepted
+from app.schemas.item import CompOut, CompsOut, ItemOut, ItemUpdate, SaleOut, ScanAccepted
 from app.schemas.template import PriceEventOut
 from app.security import CurrentUser
 from app.services import item_lifecycle, photo_store, scan_pipeline
@@ -221,6 +222,20 @@ async def comps(
         patient=suggestion.patient if suggestion else None,
         comp_count=suggestion.comp_count if suggestion else 0,
     )
+
+
+@router.get("/{item_id}/sale", response_model=SaleOut)
+async def item_sale(
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """The sale record for a sold item — buyer address + ship state for the Ship screen."""
+    await _owned_item(db, user.id, item_id)
+    sale = (await db.execute(select(Sale).where(Sale.item_id == item_id))).scalar_one_or_none()
+    if sale is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item has no sale yet")
+    return sale
 
 
 @router.get("/{item_id}/price-events", response_model=list[PriceEventOut])
