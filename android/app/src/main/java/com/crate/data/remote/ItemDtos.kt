@@ -122,6 +122,24 @@ data class BuyLabelRequest(
 )
 
 @Serializable
+data class UserSettingsDto(
+    val id: String,
+    @SerialName("drops_enabled") val dropsEnabled: Boolean,
+    @SerialName("drop_interval_days") val dropIntervalDays: Int,
+    @SerialName("drop_step_percent") val dropStepPercent: String,
+    @SerialName("shipping_preference") val shippingPreference: String,
+    @SerialName("ntfy_topic") val ntfyTopic: String? = null,
+)
+
+@Serializable
+data class UserSettingsUpdate(
+    @SerialName("drops_enabled") val dropsEnabled: Boolean? = null,
+    @SerialName("drop_interval_days") val dropIntervalDays: Int? = null,
+    @SerialName("drop_step_percent") val dropStepPercent: String? = null,
+    @SerialName("shipping_preference") val shippingPreference: String? = null,
+)
+
+@Serializable
 data class EbayConnectDto(
     @SerialName("authorize_url") val authorizeUrl: String,
 )

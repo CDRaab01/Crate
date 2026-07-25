@@ -387,3 +387,52 @@ in the eBay app (deep link) — Crate flags, it doesn't chat (v1).
 - Buyer addresses and OAuth tokens are the most sensitive data in the suite so
   far: tailnet-only exposure, tokens encrypted at rest, and no third-party calls
   beyond eBay/Shippo with the minimum payload each needs.
+
+---
+
+## Build log (2026-07-25) — Phases 0-8 built in one pass
+
+All nine phases landed on `claude/new-session-5pdxtl` (one commit per phase-sized
+chunk), verified locally per commit: server **147 pytest green + ruff check/format
+clean** against a throwaway Postgres (alembic chain 0001→0002 applies AND downgrades on
+a fresh DB); Android **16 unit tests + `:app:assembleDebug` green** against the real
+Pulse sibling checkout (SDK bootstrapped in the build container; CI re-verifies with
+its own Pulse checkout). Every external service (eBay, Shippo, LM Studio, rembg, ntfy)
+is mocked in CI per §8.
+
+- **Suite registrations shipped in sibling repos** (same branch name in each):
+  Pulse `PulseAccent.Copper` (base `0xFFD98A5B`, deep `0xFF9A4D1B` — 6.1:1 on white;
+  heated-metal hero sweep OrangeDeep→CopperDeep with the white-text guarantee;
+  `pulse-index.json` regenerated); Dragonfly `AppRegistry` + `<queries>`; dragonfly-id
+  `crate` OIDC client + registration test + `crate-smoke@dragonflymedia.org` in the
+  `SMOKE_SUBJECT_EMAILS` compose pin + `SMOKE_CLIENTS` documented in `.env.example`.
+  Dragonfly's status-dashboard `ServiceRegistry` entry was deliberately deferred until
+  the real ts.net URL exists (the Hawksnest URL-guess lesson).
+- **Deviations from the spec above, flagged per §0** (details in ARCHITECTURE.md):
+  `items.brand/model` columns added (migration `0002` — the template signature needs
+  them at sale time, long after the vision draft is gone) plus
+  `processed_at`/`scan_error` scan-pipeline state; the template signature uses
+  **brand+model tokens only** (category_hint is transient, so a sale-time signature
+  could never reproduce a capture-time one); PATCH clearing uses `exclude_none`
+  (kotlinx clients send explicit nulls). Buyer messages are **subject-only** in v1
+  (Trading GetMyMessages header detail) — Crate flags, replies happen in the eBay app.
+- **Planned tailnet exposure:** Tailscale Serve port **8446** (443/8443/8445 taken);
+  the CI/app default server URL is `https://dragonfly.tail2ce561.ts.net:8446/` until
+  the real URL is confirmed at first deploy (override via the `CRATE_SERVER_URL`
+  Actions variable + the config broker at runtime).
+- **Human-gated items (build never blocked on them, everything lands mocked-green):**
+  1. eBay developer account → sandbox keyset (`EBAY_CLIENT_ID/SECRET`) → pricing +
+     `/comps` go live; RuName pointing at the ts.net callback → one-time OAuth consent
+     from a tailnet browser → posting/polling go live; production keyset (apply for
+     the **marketplace-account-deletion exemption**) → `EBAY_ENVIRONMENT=production`.
+  2. One-time seller setup: business policies (`EBAY_*_POLICY_ID`) +
+     `EBAY_LOCATION_POSTAL_CODE`; `FERNET_KEY`; Shippo key + `SHIP_FROM_*`.
+  3. Deploy: `crate` runner + `CRATE_DIR` variable, Tailscale Serve, ntfy topic,
+     `crate-smoke` secret in dragonfly-id's `SMOKE_CLIENTS` (+ same value in Crate's
+     `.env` for the smoke), Dragonfly `ServiceRegistry` row once the URL is real.
+  4. On-device pass (camera flow, AppAuth redirect, label PDF share) — CI builds are
+     the gate until the phone is in hand; Roborazzi baselines unrecorded (the
+     `workflow_dispatch` screenshots job exists, suite pattern).
+- **Deferred (post-v1, per §1):** `/cross-app/summary` for the Dragonfly digest
+  ("Money" card), buyer-message full bodies + in-app replies, auction format,
+  international shipping, multi-marketplace, bookkeeping.

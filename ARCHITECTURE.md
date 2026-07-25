@@ -123,6 +123,25 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
 
+## Auto price-drop scheduler (Phase 8, as built — the §9 documented exception)
+
+- `app/pricing/drops.py` — the pure policy: one step down
+  (`current × (100 − step)/100`, cent-quantized) clamped to the quick-sale floor; due
+  when the interval elapsed since the LAST CHANGE (listing date or latest price event);
+  at the floor for a further interval ⇒ hold/relist/delist prompt exactly once
+  (`floor_reached` event is the latch). Unpriced items are left alone entirely.
+- `services/drop_scheduler.py` — the daily pass (lifespan task, first run 1h after
+  boot). Per item, own session. **eBay first**: the offer update runs before anything
+  is recorded locally, so a rejected update rolls back and the local price never lies
+  about the live listing; the next pass retries. Every drop = a `price_events` row + an
+  ntfy ping — the audit trail is what makes this unattended write acceptable.
+- `GET/PATCH /settings` — the policy knobs (enabled/interval 1-90d/step 1-50%/shipping
+  preference), bounds-checked so a typo can't become a strategy.
+- `POST /items/{id}/relist` — republish a withdrawn offer (delisted/returned → active),
+  explicit tap like every listing write.
+- Client: Settings gains the drop-policy card + shipping preference; item detail gains
+  Delist/Relist.
+
 ## Shipping (Phase 7, as built — Shippo test mode, mocked in CI)
 
 - **The confirm gate** (locked decision): `POST /items/{id}/confirm-weight` stores the

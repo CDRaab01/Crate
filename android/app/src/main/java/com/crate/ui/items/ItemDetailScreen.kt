@@ -53,7 +53,14 @@ fun ItemDetailScreen(
             PanelCard { Text(state.message, color = MaterialTheme.colorScheme.error) }
         }
 
-        is UiState.Success -> Detail(state.data, priceEvents, sale, onShip)
+        is UiState.Success -> Detail(
+            item = state.data,
+            priceEvents = priceEvents,
+            sale = sale,
+            onShip = onShip,
+            onDelist = { viewModel.delist {} },
+            onRelist = { viewModel.relist {} },
+        )
     }
 }
 
@@ -63,6 +70,8 @@ private fun Detail(
     priceEvents: List<com.crate.data.remote.PriceEventDto>,
     sale: com.crate.data.remote.SaleDto?,
     onShip: (String) -> Unit,
+    onDelist: () -> Unit = {},
+    onRelist: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -183,6 +192,20 @@ private fun Detail(
                     if (!item.weightConfirmed) append("  (unconfirmed)")
                 },
                 style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        when (item.status) {
+            "active" -> PulseButton(
+                text = "Delist from eBay",
+                onClick = onDelist,
+                tonal = true,
+                compact = true,
+            )
+            "delisted", "returned" -> PulseButton(
+                text = "Relist on eBay",
+                onClick = onRelist,
+                compact = true,
             )
         }
     }

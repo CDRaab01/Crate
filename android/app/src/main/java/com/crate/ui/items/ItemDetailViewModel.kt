@@ -35,6 +35,27 @@ class ItemDetailViewModel @Inject constructor(
         refresh()
     }
 
+    /** Explicit listing writes (never automated): withdraw or republish the offer. */
+    fun delist(onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                _item.value = UiState.Success(api.delistItem(itemId))
+            } catch (e: Exception) {
+                onError(e.message ?: "Delist failed")
+            }
+        }
+    }
+
+    fun relist(onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                _item.value = UiState.Success(api.relistItem(itemId))
+            } catch (e: Exception) {
+                onError(e.message ?: "Relist failed")
+            }
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             val loaded = try {

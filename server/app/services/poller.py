@@ -17,6 +17,7 @@ from app.services.ebay import fulfillment, oauth
 logger = logging.getLogger(__name__)
 
 _task: asyncio.Task | None = None
+_drop_task: asyncio.Task | None = None
 
 
 async def poll_once() -> dict:
@@ -45,17 +46,36 @@ async def _loop() -> None:
             logger.exception("poll cycle crashed; continuing")
 
 
+async def _drop_loop() -> None:
+    from app.services.drop_scheduler import drop_cycle
+
+    # First pass an hour after boot (a redeploy shouldn't fire drops instantly), then daily.
+    await asyncio.sleep(3600)
+    while True:
+        try:
+            totals = await drop_cycle()
+            if totals["dropped"] or totals["floor_prompts"]:
+                logger.info("drop cycle: %s", totals)
+        except Exception:
+            logger.exception("drop cycle crashed; continuing")
+        await asyncio.sleep(24 * 3600)
+
+
 def start() -> None:
-    global _task
+    global _task, _drop_task
     if settings.poll_interval_minutes <= 0 or not oauth.configured():
-        logger.info("order poller disabled (interval=0 or eBay unconfigured)")
+        logger.info("schedulers disabled (interval=0 or eBay unconfigured)")
         return
     if _task is None or _task.done():
         _task = asyncio.get_event_loop().create_task(_loop())
+    if _drop_task is None or _drop_task.done():
+        _drop_task = asyncio.get_event_loop().create_task(_drop_loop())
 
 
 def stop() -> None:
-    global _task
-    if _task is not None:
-        _task.cancel()
-        _task = None
+    global _task, _drop_task
+    for task in (_task, _drop_task):
+        if task is not None:
+            task.cancel()
+    _task = None
+    _drop_task = None

@@ -279,6 +279,36 @@ async def update_offer_price(
             await active.aclose()
 
 
+async def republish_offer(
+    db: AsyncSession, item: Item, client: httpx.AsyncClient | None = None
+) -> str:
+    """Re-publish a withdrawn offer (relist after delist/return). The offer still exists
+    on eBay; publish assigns a fresh listingId."""
+    if item.ebay_offer_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Item has no eBay offer to relist")
+    token = await oauth.user_token(db, item.user_id, client=client)
+    owns = client is None
+    active = client or httpx.AsyncClient(timeout=30.0)
+    try:
+        pub = await active.post(
+            f"{oauth.api_host()}/sell/inventory/v1/offer/{item.ebay_offer_id}/publish",
+            headers=_headers(token),
+        )
+        if pub.status_code not in (200, 201):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                f"eBay rejected the relist ({pub.status_code}): {pub.text[:300]}",
+            )
+        listing_id = pub.json().get("listingId")
+        if not listing_id:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Relist returned no listingId")
+        item.ebay_listing_id = str(listing_id)
+        return item.ebay_listing_id
+    finally:
+        if owns:
+            await active.aclose()
+
+
 async def end_listing(
     db: AsyncSession, item: Item, client: httpx.AsyncClient | None = None
 ) -> None:

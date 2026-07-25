@@ -192,6 +192,28 @@ async def delist_item(
     return await _owned_item(db, user.id, item_id)
 
 
+@router.post("/{item_id}/relist", response_model=ItemOut)
+@limiter.limit("20/minute")
+async def relist_item(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Put a delisted (or returned) item back on eBay — the existing offer republishes
+    with a fresh listingId. Explicit tap, like every listing write."""
+    item = await _owned_item(db, user.id, item_id)
+    if item.status not in ("delisted", "returned"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Only delisted/returned items can be relisted (status={item.status!r})",
+        )
+    await sell.republish_offer(db, item)
+    await item_lifecycle.transition(db, item, "active")
+    await db.commit()
+    return await _owned_item(db, user.id, item_id)
+
+
 @router.get("/{item_id}/comps", response_model=CompsOut)
 @limiter.limit("30/minute")
 async def comps(

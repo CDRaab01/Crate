@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.EbayStatusDto
+import com.crate.data.remote.UserSettingsDto
+import com.crate.data.remote.UserSettingsUpdate
 import com.crate.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,6 +25,9 @@ class SettingsViewModel @Inject constructor(
     private val _connectUrl = MutableStateFlow<String?>(null)
     val connectUrl: StateFlow<String?> = _connectUrl
 
+    private val _userSettings = MutableStateFlow<UserSettingsDto?>(null)
+    val userSettings: StateFlow<UserSettingsDto?> = _userSettings
+
     init {
         refresh()
     }
@@ -33,6 +38,29 @@ class SettingsViewModel @Inject constructor(
                 UiState.Success(api.ebayStatus())
             } catch (e: Exception) {
                 UiState.Error(e.message ?: "Couldn't reach the server")
+            }
+            _userSettings.value = try {
+                api.getSettings()
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    /** The drop-policy knobs — what makes the unattended scheduler 'user-configured'. */
+    fun saveDropPolicy(enabled: Boolean, intervalDays: Int, stepPercent: String, preference: String) {
+        viewModelScope.launch {
+            try {
+                _userSettings.value = api.updateSettings(
+                    UserSettingsUpdate(
+                        dropsEnabled = enabled,
+                        dropIntervalDays = intervalDays,
+                        dropStepPercent = stepPercent,
+                        shippingPreference = preference,
+                    )
+                )
+            } catch (_: Exception) {
+                refresh()
             }
         }
     }

@@ -9,7 +9,17 @@ from app.config import settings
 from app.limiter import limiter
 from contextlib import asynccontextmanager
 
-from app.routers import auth, ebay, items, messages, shipping, suite_auth, templates, users
+from app.routers import (
+    auth,
+    ebay,
+    items,
+    messages,
+    settings as settings_router,
+    shipping,
+    suite_auth,
+    templates,
+    users,
+)
 from app.services import poller
 
 # Single source for the human-facing version, reused by GET /version below.
@@ -81,6 +91,7 @@ app.include_router(templates.router)
 app.include_router(ebay.router)
 app.include_router(messages.router)
 app.include_router(shipping.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/health", tags=["health"])

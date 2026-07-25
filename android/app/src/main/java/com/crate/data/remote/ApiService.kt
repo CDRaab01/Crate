@@ -72,4 +72,13 @@ interface ApiService {
 
     @POST("items/{id}/buy-label")
     suspend fun buyLabel(@Path("id") id: String, @Body req: BuyLabelRequest): SaleDto
+
+    @POST("items/{id}/relist")
+    suspend fun relistItem(@Path("id") id: String): ItemDto
+
+    @GET("settings")
+    suspend fun getSettings(): UserSettingsDto
+
+    @PATCH("settings")
+    suspend fun updateSettings(@Body req: UserSettingsUpdate): UserSettingsDto
 }
