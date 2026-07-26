@@ -60,11 +60,18 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:CRATE_DIR)) {
             throw "CRATE_DIR Actions variable is not set. See deploy/README.md."
           }
+          # CRATE_DIR pointing at a path that isn't the deployment clone otherwise fails
+          # as a bare CommandNotFoundException on the `&` below, which reads like a broken
+          # workflow rather than missing host setup. Name the actual gap instead.
+          $script = Join-Path $env:CRATE_DIR "deploy\redeploy.ps1"
+          if (-not (Test-Path $script)) {
+            throw "No deployment clone at '$env:CRATE_DIR' ($script not found). One-time host setup: git clone https://github.com/CDRaab01/Crate.git '$env:CRATE_DIR', then create server/.env (see deploy/README.md for the required keys)."
+          }
           if ($env:EVENT_NAME -eq 'workflow_dispatch') { $ref = $env:INPUT_REF }
           else { $ref = $env:WORKFLOW_SHA }
           if ([string]::IsNullOrWhiteSpace($ref)) { $ref = 'origin/main' }
           Write-Host "Deploying ref: $ref"
-          & "$env:CRATE_DIR\deploy\redeploy.ps1" -Ref $ref
+          & $script -Ref $ref
 
       # Post-deploy synthetic smoke: proves SSO auth + DB read/write actually work against the
       # just-deployed server, not just that /health is up. Crate is SSO-only, so the smoke mints
