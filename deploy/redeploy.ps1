@@ -121,7 +121,10 @@ while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 3
 }
 if ($wrongApp) {
-  throw "$HealthUrl answered ok but /version reports '$wrongApp', not 'Crate API' — another app owns this port. Check the published ports in docker-compose.yml against 'docker ps'."
+  # ASCII only inside quoted strings: Windows PowerShell 5.1 reads this file as cp1252, so a
+  # UTF-8 em dash decodes to a curly quote that silently terminates the string and breaks the
+  # parse. Em dashes in comments are fine (they end at the newline); in code they are not.
+  throw "$HealthUrl answered ok but /version reports '$wrongApp', not 'Crate API' - another app owns this port. Check the published ports in docker-compose.yml against 'docker ps'."
 }
 if (-not $healthy) {
   # Dump recent container logs so a failed deploy is debuggable from the run output
