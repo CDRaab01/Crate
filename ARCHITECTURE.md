@@ -93,9 +93,16 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
   `main`; epoch-minutes versionCode; apksigner guard pinned to the suite signer
   (`5a596c9e…`).
 - `deploy.yml` — self-hosted `crate`-labeled runner redeploys green `main` via
-  `deploy/redeploy.ps1` (health-gated on `127.0.0.1:8007/health`), then runs the
-  synthetic smoke inside the container. Human-gated setup: runner registration +
+  `deploy/redeploy.ps1`, then runs the synthetic smoke inside the container. An opt-in
+  `bootstrap_host` input creates the deployment clone and a minimal `server/.env` when
+  absent (never overwrites an existing `.env`). Human-gated setup: runner registration +
   `CRATE_DIR` Actions variable + Tailscale Serve config.
+- **Health gate identity check.** The gate polls `127.0.0.1:8007/health` *and* asserts
+  `/version` reports `name == "Crate API"`. `/health` returns an identical
+  `{"status":"ok"}` in every suite app, so port alone cannot identify the responder — the
+  first deploy pointed at 8005, got an instant "ok" from **Magpie**, and declared success
+  while Crate was still booting. A neighbour answering is treated as a config error and
+  fails immediately rather than retrying to the timeout.
 
 ## Suite registrations (done at Phase 0, in sibling repos)
 
