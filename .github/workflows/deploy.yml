@@ -163,7 +163,19 @@ jobs:
           $proj = $env:CRATE_DIR
           # Run the smoke INSIDE the server container (python is there; the runner has no host
           # python on PATH), hitting the app on its internal port 8000.
+          #
+          # SMOKE_TOKEN_URL overrides the script's public default. dragonfly-id runs on THIS host
+          # (127.0.0.1:8004), so minting via https://id.dragonflymedia.org would leave the machine,
+          # cross Cloudflare and come back — and Cloudflare's bot protection rejected exactly that
+          # with "error code: 1010" (a 403 the identity server never saw, since urllib does not look
+          # like a browser). A post-deploy smoke should not depend on the public edge being happy
+          # about a scripted request. host.docker.internal is the host from inside the container,
+          # the same hop the LM Studio pin uses. The minted token's issuer comes from dragonfly-id's
+          # ISSUER config, not from the URL used to reach it, so the token is unchanged.
           docker compose -f "$proj\docker-compose.yml" cp "$proj\scripts\synthetic_smoke.py" server:/tmp/smoke.py
           if ($LASTEXITCODE -ne 0) { throw "copying smoke script into container failed" }
-          docker compose -f "$proj\docker-compose.yml" exec -T -e CRATE_URL=http://localhost:8000 server python /tmp/smoke.py
+          docker compose -f "$proj\docker-compose.yml" exec -T `
+            -e CRATE_URL=http://localhost:8000 `
+            -e SMOKE_TOKEN_URL=http://host.docker.internal:8004/smoke/token `
+            server python /tmp/smoke.py
           if ($LASTEXITCODE -ne 0) { throw "post-deploy smoke FAILED" }

@@ -59,7 +59,10 @@ def decode_body(raw: bytes) -> dict:
 
 
 def request(method: str, url: str, *, form=None, body=None, token=None, timeout=15):
-    headers = {}
+    # Identify ourselves. urllib's default UA ("Python-urllib/3.x") is a known bot signature, and
+    # a CDN in front of any endpoint this script talks to can reject it outright — Cloudflare
+    # answered "error code: 1010" (403) to exactly that, before the request reached the app.
+    headers = {"User-Agent": "crate-synthetic-smoke/1.0"}
     data = None
     if form is not None:
         data = urllib.parse.urlencode(form).encode()
@@ -104,8 +107,11 @@ def main() -> None:
             f"  404 => SMOKE_CLIENTS unset on dragonfly-id (Compose needs --force-recreate\n"
             f"         after an .env edit; a plain `up` will not re-read it)\n"
             f"  401 => client id/secret does not match its SMOKE_CLIENTS entry\n"
-            f"  403 => {SMOKE_EMAIL} is missing from SMOKE_SUBJECT_EMAILS\n"
-            f"  _raw => a proxy/gateway answered instead of the app, not an app error"
+            f"  403 => {SMOKE_EMAIL} is missing from SMOKE_SUBJECT_EMAILS, OR a CDN blocked the\n"
+            f"         request before it reached the app (see _raw)\n"
+            f"  _raw => a proxy/gateway answered, not the app. 'error code: 1010' is Cloudflare\n"
+            f"         rejecting the client signature; reach dragonfly-id on the host instead\n"
+            f"         (SMOKE_TOKEN_URL=http://host.docker.internal:8004/smoke/token)"
         )
     suite_token = body["access_token"]
 
