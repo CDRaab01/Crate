@@ -39,6 +39,25 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def decode_body(raw: bytes) -> dict:
+    """Decode a response body without assuming it is JSON.
+
+    Error responses often aren't: a proxy or gateway in front of the identity server answers with
+    an HTML page, and json.loads()ing that turns a diagnosable failure (a status code plus a page
+    saying what broke) into an opaque JSONDecodeError traceback. Non-JSON bodies come back under
+    "_raw" so the caller's "returned {status}: {body}" message still says something useful.
+    """
+    text = raw.decode(errors="replace").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return {"_raw": " ".join(text.split())[:200]}
+    # A JSON scalar or array is valid JSON but not a mapping, and every caller does .get().
+    return parsed if isinstance(parsed, dict) else {"_raw": str(parsed)[:200]}
+
+
 def request(method: str, url: str, *, form=None, body=None, token=None, timeout=15):
     headers = {}
     data = None
@@ -53,9 +72,9 @@ def request(method: str, url: str, *, form=None, body=None, token=None, timeout=
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, json.loads(resp.read().decode() or "{}")
+            return resp.status, decode_body(resp.read())
     except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read().decode() or "{}")
+        return e.code, decode_body(e.read())
     except Exception as e:  # noqa: BLE001 — a smoke failure reason is always worth printing
         fail(f"{method} {url}: {e}")
 
@@ -80,7 +99,14 @@ def main() -> None:
         },
     )
     if status != 200 or "access_token" not in body:
-        fail(f"smoke token mint returned {status}: {body}")
+        fail(
+            f"smoke token mint via {SMOKE_TOKEN_URL} returned {status}: {body}\n"
+            f"  404 => SMOKE_CLIENTS unset on dragonfly-id (Compose needs --force-recreate\n"
+            f"         after an .env edit; a plain `up` will not re-read it)\n"
+            f"  401 => client id/secret does not match its SMOKE_CLIENTS entry\n"
+            f"  403 => {SMOKE_EMAIL} is missing from SMOKE_SUBJECT_EMAILS\n"
+            f"  _raw => a proxy/gateway answered instead of the app, not an app error"
+        )
     suite_token = body["access_token"]
 
     # 2. Trade it for a Crate session (find-or-create by email).
