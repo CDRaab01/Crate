@@ -21,6 +21,11 @@ on:
         description: "Commit SHA or branch to deploy (default: origin/main). Use a prior SHA to roll back."
         required: false
         default: "origin/main"
+      bootstrap_host:
+        description: "One-time host setup: create the deployment clone and a minimal server/.env if they don't exist yet."
+        required: false
+        type: boolean
+        default: false
 
 # Never let two deploys run at once; queue the second instead of colliding.
 concurrency:
@@ -48,7 +53,63 @@ jobs:
       # shell: powershell is the built-in Windows PowerShell (5.1) — no PowerShell 7
       # (pwsh) install required on the host. GitHub context is passed via env (not
       # ${{ }} interpolated into code) so values can't break out of the script.
-      - name: Redeploy
+      # Opt-in, one-time, and strictly additive: it creates the deployment clone and a minimal
+      # server/.env only when they are ABSENT. It never overwrites an existing .env — that file
+      # holds real secrets and clobbering it would be unrecoverable. Off by default so the normal
+      # deploy path has no hidden side effects.
+      - name: Bootstrap host (one-time)
+        if: inputs.bootstrap_host
+        shell: powershell
+        env:
+          CRATE_DIR: ${{ vars.CRATE_DIR }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = $env:CRATE_DIR
+          if ([string]::IsNullOrWhiteSpace($dir)) {
+            throw "CRATE_DIR Actions variable is not set. See deploy/README.md."
+          }
+
+          if (Test-Path (Join-Path $dir ".git")) {
+            Write-Host "Deployment clone already present at $dir - leaving it as is."
+          } else {
+            $parent = Split-Path -Parent $dir
+            if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Write-Host "Cloning CDRaab01/Crate into $dir ..."
+            & git clone https://github.com/CDRaab01/Crate.git $dir
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+          }
+
+          # DATABASE_URL and the SSO pins come from docker-compose.yml's `environment:` block, so
+          # SECRET_KEY is the only value the app actually needs to boot. Every other integration
+          # (eBay, Shippo, Fernet, the deploy smoke) degrades to 503 while unset.
+          $envPath = Join-Path $dir "server\.env"
+          if (Test-Path $envPath) {
+            Write-Host "server/.env already exists - leaving it untouched."
+          } else {
+            $bytes = New-Object byte[] 32
+            [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+            $key = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+            # Written with LF endings: CRLF leaves a stray \r inside every parsed value.
+            [System.IO.File]::WriteAllText($envPath, "SECRET_KEY=$key`n")
+            Write-Host "Wrote a minimal server/.env with a freshly generated SECRET_KEY (value not logged)."
+          }
+
+          # Crate's host ports are a "verify these are still free" assumption, and the first
+          # deploy found 8005/5436 already held by Magpie. Print the neighbours' port map so a
+          # collision names the owner instead of surfacing as a bare "port is already allocated"
+          # from deep inside compose. `docker ps` rather than netstat: Docker Desktop's proxy
+          # does not show these binds as LISTENING, so netstat reports them free.
+          Write-Host "--- containers publishing ports (Crate wants 8007 API / 5438 Postgres) ---"
+          & docker ps --format "{{.Names}}  {{.Ports}}"
+
+      # Sync the clone to the target ref BEFORE invoking redeploy.ps1. PowerShell parses the
+      # whole script at invocation, so a run that lets redeploy.ps1 update itself mid-flight is
+      # really executing the PREVIOUS commit's script — every change to it landed one deploy
+      # late. Worse, a redeploy.ps1 that fails to parse can never repair itself: it dies before
+      # reaching its own `git reset`, leaving the clone pinned to the broken version. Syncing
+      # first makes the script that runs always be the script being deployed.
+      # redeploy.ps1 still fetches/resets itself (idempotent) so a human can run it standalone.
+      - name: Sync deployment clone
         shell: powershell
         env:
           CRATE_DIR: ${{ vars.CRATE_DIR }}
@@ -60,11 +121,33 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:CRATE_DIR)) {
             throw "CRATE_DIR Actions variable is not set. See deploy/README.md."
           }
+          if (-not (Test-Path (Join-Path $env:CRATE_DIR ".git"))) {
+            throw "No deployment clone at '$env:CRATE_DIR'. Re-run this workflow with bootstrap_host enabled, or see deploy/README.md."
+          }
           if ($env:EVENT_NAME -eq 'workflow_dispatch') { $ref = $env:INPUT_REF }
           else { $ref = $env:WORKFLOW_SHA }
           if ([string]::IsNullOrWhiteSpace($ref)) { $ref = 'origin/main' }
           Write-Host "Deploying ref: $ref"
-          & "$env:CRATE_DIR\deploy\redeploy.ps1" -Ref $ref
+          # Same CVE-2022-24765 self-heal redeploy.ps1 does: the runner's service account is not
+          # the account that owns the clone.
+          & git config --global --add safe.directory $env:CRATE_DIR 2>$null
+          & git -C $env:CRATE_DIR fetch --prune origin
+          if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+          & git -C $env:CRATE_DIR reset --hard $ref
+          if ($LASTEXITCODE -ne 0) { throw "git reset failed (unknown ref '$ref'?)" }
+          "DEPLOY_REF=$ref" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+
+      - name: Redeploy
+        shell: powershell
+        env:
+          CRATE_DIR: ${{ vars.CRATE_DIR }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $script = Join-Path $env:CRATE_DIR "deploy\redeploy.ps1"
+          if (-not (Test-Path $script)) {
+            throw "'$script' not found even after syncing the clone - does this ref contain deploy/redeploy.ps1?"
+          }
+          & $script -Ref $env:DEPLOY_REF
 
       # Post-deploy synthetic smoke: proves SSO auth + DB read/write actually work against the
       # just-deployed server, not just that /health is up. Crate is SSO-only, so the smoke mints

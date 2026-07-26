@@ -25,8 +25,9 @@
   Commit SHA or branch to deploy. Defaults to origin/main. Pass a prior SHA to roll back.
 
 .PARAMETER HealthUrl
-  Health endpoint to poll after restart. Defaults to http://127.0.0.1:8005/health
-  (Crate is published on 8005: 8000-8004 belong to Spotter/Plate/posterizarr/Cookbook/dragonfly-id).
+  Health endpoint to poll after restart. Defaults to http://127.0.0.1:8007/health
+  (Crate is published on 8007: 8000-8006 belong to Spotter/Plate/posterizarr/Cookbook/
+  dragonfly-id/Magpie/Remnant).
 
 .PARAMETER TimeoutSeconds
   How long to wait for the health check before failing. Defaults to 120.
@@ -44,7 +45,7 @@
 [CmdletBinding()]
 param(
   [string]$Ref = "origin/main",
-  [string]$HealthUrl = "http://127.0.0.1:8005/health",
+  [string]$HealthUrl = "http://127.0.0.1:8007/health",
   [int]$TimeoutSeconds = 120,
   [int]$FailureLogLines = 100
 )
@@ -91,17 +92,39 @@ $env:BUILT_AT = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 Invoke-Checked docker @("compose", "--project-directory", $RepoDir, "up", "-d", "--build", "--remove-orphans")
 
 # 4. Health gate — fail the run if the API doesn't come back healthy.
+#    /health is byte-identical across every suite app ({"status":"ok"}), so polling it alone
+#    cannot tell Crate apart from whichever neighbour owns the port. That is not theoretical:
+#    the first deploy here pointed at 8005, got an instant "ok" from Magpie, and reported a
+#    green deploy while Crate was still booting. Confirm identity via /version's name too.
+$VersionUrl = ($HealthUrl -replace '/health$', '/version')
 Write-Host "Waiting for $HealthUrl (timeout ${TimeoutSeconds}s)..."
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $healthy = $false
+$wrongApp = $null
 while ((Get-Date) -lt $deadline) {
   try {
     $resp = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 5
-    if ($resp.status -eq "ok") { $healthy = $true; break }
+    if ($resp.status -eq "ok") {
+      $ver = Invoke-RestMethod -Uri $VersionUrl -TimeoutSec 5
+      if ($ver.name -eq "Crate API") {
+        Write-Host "Serving Crate API $($ver.version) (commit $($ver.commit), built $($ver.built_at))."
+        $healthy = $true
+        break
+      }
+      # A neighbour answering here is a config error, not a slow start — stop retrying.
+      $wrongApp = $ver.name
+      break
+    }
   } catch {
     # not up yet
   }
   Start-Sleep -Seconds 3
+}
+if ($wrongApp) {
+  # ASCII only inside quoted strings: Windows PowerShell 5.1 reads this file as cp1252, so a
+  # UTF-8 em dash decodes to a curly quote that silently terminates the string and breaks the
+  # parse. Em dashes in comments are fine (they end at the newline); in code they are not.
+  throw "$HealthUrl answered ok but /version reports '$wrongApp', not 'Crate API' - another app owns this port. Check the published ports in docker-compose.yml against 'docker ps'."
 }
 if (-not $healthy) {
   # Dump recent container logs so a failed deploy is debuggable from the run output

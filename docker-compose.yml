@@ -13,9 +13,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-crate}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crate}
       POSTGRES_DB: ${POSTGRES_DB:-crate}
-    # Host port 5436: 5432-5435 belong to Spotter/Plate/Cookbook/dragonfly-id on this host.
+    # Host port 5438: 5432-5437 belong to Spotter/Plate/Cookbook/dragonfly-id/Magpie/Remnant
+    # on this host (5436 is Magpie's — verified against `docker ps` at first deploy).
     ports:
-      - "127.0.0.1:5436:5432"
+      - "127.0.0.1:5438:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -58,12 +59,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Published on localhost only. Host port 8005: 8000-8004 belong to
-    # Spotter/Plate/posterizarr/Cookbook/dragonfly-id. Crate is tailnet-only — NO cloudflared
+    # Published on localhost only. Host port 8007: 8000-8006 belong to
+    # Spotter/Plate/posterizarr/Cookbook/dragonfly-id/Magpie/Remnant (8005 is Magpie's —
+    # verified against `docker ps` at first deploy). Crate is tailnet-only — NO cloudflared
     # service, no `tunnel` profile: it is reached via Tailscale Serve on the host (it handles
     # buyer addresses and money; keep it off the public internet).
     ports:
-      - "127.0.0.1:8005:8000"
+      - "127.0.0.1:8007:8000"
 
 volumes:
   pgdata:
