@@ -142,6 +142,11 @@ the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeli
    Content failure ⇒ low-confidence empty draft (`scan_error="low_confidence"`);
    transport failure ⇒ `scan_error="identify_unavailable: …"` — the draft always
    survives with its photos.
+   `LM_STUDIO_BASE_URL` is pinned in compose `environment:` as
+   `http://host.docker.internal:1234/v1`. The config default (`localhost`) is correct only
+   for bare-metal local dev — in the container localhost is the container, so relying on the
+   default makes every scan degrade to `identify_unavailable` while LM Studio is up and
+   healthy on the host.
 
 Review surface: `GET /items[?status_filter=]`, `PATCH /items/{id}` (suite clearing
 convention: null/omitted = untouched, "" = clear — `exclude_none`, because kotlinx

@@ -52,6 +52,13 @@ services:
       # drops. Empty = notifications silently off.
       NTFY_BASE_URL: ${NTFY_BASE_URL:-https://ntfy.sh}
       NTFY_TOPIC: ${NTFY_TOPIC:-}
+      # LM Studio vision (item identification + condition + weight/dims). Non-secret and
+      # required ⇒ pinned here. The config default is http://localhost:1234/v1, which is
+      # correct only for bare-metal local dev: inside this container localhost is the
+      # container, so scans would fail with a connect-refused 503 even when LM Studio is
+      # running fine on the host. host.docker.internal is the host from in here.
+      LM_STUDIO_BASE_URL: ${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      LM_STUDIO_VISION_MODEL: ${LM_STUDIO_VISION_MODEL:-google/gemma-4-e4b}
     volumes:
       # Item photos (originals + cleaned) live on the host, not in the container — they must
       # survive redeploys. The DB stores paths only.
