@@ -24,7 +24,7 @@ deploy/    self-hosted runner redeploy script (Windows/Docker Desktop host)
 
 ```bash
 cd server
-cp .env.example .env    # set SECRET_KEY; DATABASE_URL points at 127.0.0.1:5436
+cp .env.example .env    # set SECRET_KEY; DATABASE_URL points at 127.0.0.1:5438
 docker compose up -d db # or point DATABASE_URL at any Postgres 16
 ./run.sh
 ```

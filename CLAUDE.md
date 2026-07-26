@@ -29,7 +29,7 @@ flag any assumption, then proceed.
 | Name / package | **Crate**, `com.crate`, repo `CDRaab01/Crate` |
 | Pricing data | **Active comps only** (eBay Browse API). Sold-comp data (Marketplace Insights API) is partner-only and not obtainable — do not design against it. Quick-sale = undercut the cheapest credible active comp; patient = median of actives. |
 | Shipping labels | **Shippo** (open API, free tier, test mode). eBay's own Logistics API is restricted-access — not used. Tracking is pushed back to the eBay order via the Fulfillment API. |
-| Storage | **Postgres** + SQLAlchemy 2.0 async + Alembic (suite standard; supersedes the early SQLite sketch). Host ports **8005 (API) / 5436 (Postgres)**. |
+| Storage | **Postgres** + SQLAlchemy 2.0 async + Alembic (suite standard; supersedes the early SQLite sketch). Host ports **8007 (API) / 5438 (Postgres)** (8005/5436 turned out to be Magpie's — corrected at first deploy). |
 | eBay account | None exists yet → **sandbox-first sequencing**; eBay always mocked in CI; production keyset + OAuth consent are human-gated items. |
 | Auth | **SSO-only** (Magpie precedent): "Sign in with Dragonfly" via `POST /auth/suite`, no register/password endpoints, synthetic-smoke token for deploy smokes. |
 | Reachability | **Tailnet-only** (Magpie pattern) — ts.net URL, no cloudflared/public hostname. Crate only polls out; eBay never calls in. |
@@ -105,8 +105,11 @@ listed/sold/net this week) is a natural post-v1 phase.
   stays the rule; any cross-app need uses the established patterns (RS256 suite
   tokens, `CROSS_APP_SECRET` JWTs) — no shared monolith.
 - **Deployment:** Docker Compose (`db`, `server`) on the Dragonfly host. Host ports
-  **API 8005, Postgres 5436** (8000–8004 / 5432–5435 belong to the siblings —
-  verify both are still free at Phase 0 and update here if not). Migrations on boot,
+  **API 8007, Postgres 5438**. 8000–8006 / 5432–5437 are taken by
+  Spotter/Plate/posterizarr/Cookbook/dragonfly-id/**Magpie**/**Remnant** — the original
+  8005/5436 pick collided with Magpie and was corrected at first deploy. Verify against
+  `docker ps` on the host, not `netstat` (Docker Desktop's proxy reports these binds free).
+  Migrations on boot,
   `GET /health` + `GET /version` (unauthenticated), self-hosted GitHub Actions
   runner (`crate` label) redeploy — clone Cookbook's `deploy/` setup. **No
   cloudflared / no `tunnel` profile**: Crate is tailnet-only, reached at its
@@ -278,7 +281,7 @@ in the eBay app (deep link) — Crate flags, it doesn't chat (v1).
 - Pulse: add `PulseAccent.Copper` (+ accent-claim row in Pulse CLAUDE.md); verify
   all consumers still build. Crate repo: Android skeleton consuming `pulse-ui`
   (CrateTheme, copper-led), FastAPI skeleton with `/health` + `/version`, Docker
-  Compose (8005/5436), CI (ruff + pytest + assembleDebug both sides), `release.yml`
+  Compose (8007/5438), CI (ruff + pytest + assembleDebug both sides), `release.yml`
   cloned from Cookbook (suite signing, Pulse checkout, apksigner guard).
   Sibling PRs: Dragonfly registry + `<queries>`; dragonfly-id `crate` OIDC client
   + smoke client/allowlist.

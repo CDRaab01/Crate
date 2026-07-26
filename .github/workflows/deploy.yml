@@ -94,20 +94,12 @@ jobs:
             Write-Host "Wrote a minimal server/.env with a freshly generated SECRET_KEY (value not logged)."
           }
 
-          # CLAUDE.md records 8005/5436 as "verify these are still free" assumptions. Report what
-          # actually holds them, so a collision is a named neighbour rather than a bare
-          # "port is already allocated" from deep inside compose.
-          Write-Host "--- host ports (Crate wants 8005 API / 5436 Postgres) ---"
-          foreach ($p in 8005, 5436) {
-            $hits = @(netstat -ano | Select-String ":$p\s+.*LISTENING")
-            if ($hits.Count -gt 0) {
-              Write-Host "port ${p}: IN USE"
-              $hits | ForEach-Object { Write-Host "    $($_.ToString().Trim())" }
-            } else {
-              Write-Host "port ${p}: free"
-            }
-          }
-          Write-Host "--- containers publishing ports ---"
+          # Crate's host ports are a "verify these are still free" assumption, and the first
+          # deploy found 8005/5436 already held by Magpie. Print the neighbours' port map so a
+          # collision names the owner instead of surfacing as a bare "port is already allocated"
+          # from deep inside compose. `docker ps` rather than netstat: Docker Desktop's proxy
+          # does not show these binds as LISTENING, so netstat reports them free.
+          Write-Host "--- containers publishing ports (Crate wants 8007 API / 5438 Postgres) ---"
           & docker ps --format "{{.Names}}  {{.Ports}}"
 
       - name: Redeploy

@@ -16,7 +16,7 @@
 
 - **One app, one backend** (suite rule). The server owns all external-service access;
   the client never talks to eBay/Shippo/LM Studio directly.
-- **Tailnet-only:** the API is published on `127.0.0.1:8005` and reached via Tailscale
+- **Tailnet-only:** the API is published on `127.0.0.1:8007` and reached via Tailscale
   Serve on the host — no cloudflared, no public hostname. eBay never calls in; Crate
   polls out on schedulers. Planned Serve port: **8446** (443/8443/8445 are taken by
   Magpie/Hawksnest/Remnant) — confirm and record the real ts.net URL at first deploy.
@@ -93,7 +93,7 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
   `main`; epoch-minutes versionCode; apksigner guard pinned to the suite signer
   (`5a596c9e…`).
 - `deploy.yml` — self-hosted `crate`-labeled runner redeploys green `main` via
-  `deploy/redeploy.ps1` (health-gated on `127.0.0.1:8005/health`), then runs the
+  `deploy/redeploy.ps1` (health-gated on `127.0.0.1:8007/health`), then runs the
   synthetic smoke inside the container. Human-gated setup: runner registration +
   `CRATE_DIR` Actions variable + Tailscale Serve config.
 

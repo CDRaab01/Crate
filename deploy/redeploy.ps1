@@ -25,8 +25,9 @@
   Commit SHA or branch to deploy. Defaults to origin/main. Pass a prior SHA to roll back.
 
 .PARAMETER HealthUrl
-  Health endpoint to poll after restart. Defaults to http://127.0.0.1:8005/health
-  (Crate is published on 8005: 8000-8004 belong to Spotter/Plate/posterizarr/Cookbook/dragonfly-id).
+  Health endpoint to poll after restart. Defaults to http://127.0.0.1:8007/health
+  (Crate is published on 8007: 8000-8006 belong to Spotter/Plate/posterizarr/Cookbook/
+  dragonfly-id/Magpie/Remnant).
 
 .PARAMETER TimeoutSeconds
   How long to wait for the health check before failing. Defaults to 120.
@@ -44,7 +45,7 @@
 [CmdletBinding()]
 param(
   [string]$Ref = "origin/main",
-  [string]$HealthUrl = "http://127.0.0.1:8005/health",
+  [string]$HealthUrl = "http://127.0.0.1:8007/health",
   [int]$TimeoutSeconds = 120,
   [int]$FailureLogLines = 100
 )

@@ -7,7 +7,7 @@ Crate's JWKS validation + find-or-create works, and the DB is reachable — not 
 /health is up.
 
 Config (env):
-  CRATE_URL                 Crate base URL       (default http://127.0.0.1:8005)
+  CRATE_URL                 Crate base URL       (default http://127.0.0.1:8007)
   SMOKE_TOKEN_URL           dragonfly-id smoke endpoint
                             (default https://id.dragonflymedia.org/smoke/token)
   CRATE_SMOKE_CLIENT_ID     smoke client id      (default crate-smoke)
@@ -25,7 +25,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CRATE_URL = os.environ.get("CRATE_URL", "http://127.0.0.1:8005").rstrip("/")
+CRATE_URL = os.environ.get("CRATE_URL", "http://127.0.0.1:8007").rstrip("/")
 SMOKE_TOKEN_URL = os.environ.get(
     "SMOKE_TOKEN_URL", "https://id.dragonflymedia.org/smoke/token"
 )
