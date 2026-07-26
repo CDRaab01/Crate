@@ -21,6 +21,11 @@ on:
         description: "Commit SHA or branch to deploy (default: origin/main). Use a prior SHA to roll back."
         required: false
         default: "origin/main"
+      bootstrap_host:
+        description: "One-time host setup: create the deployment clone and a minimal server/.env if they don't exist yet."
+        required: false
+        type: boolean
+        default: false
 
 # Never let two deploys run at once; queue the second instead of colliding.
 concurrency:
@@ -48,6 +53,47 @@ jobs:
       # shell: powershell is the built-in Windows PowerShell (5.1) — no PowerShell 7
       # (pwsh) install required on the host. GitHub context is passed via env (not
       # ${{ }} interpolated into code) so values can't break out of the script.
+      # Opt-in, one-time, and strictly additive: it creates the deployment clone and a minimal
+      # server/.env only when they are ABSENT. It never overwrites an existing .env — that file
+      # holds real secrets and clobbering it would be unrecoverable. Off by default so the normal
+      # deploy path has no hidden side effects.
+      - name: Bootstrap host (one-time)
+        if: inputs.bootstrap_host
+        shell: powershell
+        env:
+          CRATE_DIR: ${{ vars.CRATE_DIR }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = $env:CRATE_DIR
+          if ([string]::IsNullOrWhiteSpace($dir)) {
+            throw "CRATE_DIR Actions variable is not set. See deploy/README.md."
+          }
+
+          if (Test-Path (Join-Path $dir ".git")) {
+            Write-Host "Deployment clone already present at $dir - leaving it as is."
+          } else {
+            $parent = Split-Path -Parent $dir
+            if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Write-Host "Cloning CDRaab01/Crate into $dir ..."
+            & git clone https://github.com/CDRaab01/Crate.git $dir
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+          }
+
+          # DATABASE_URL and the SSO pins come from docker-compose.yml's `environment:` block, so
+          # SECRET_KEY is the only value the app actually needs to boot. Every other integration
+          # (eBay, Shippo, Fernet, the deploy smoke) degrades to 503 while unset.
+          $envPath = Join-Path $dir "server\.env"
+          if (Test-Path $envPath) {
+            Write-Host "server/.env already exists - leaving it untouched."
+          } else {
+            $bytes = New-Object byte[] 32
+            [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+            $key = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+            # Written with LF endings: CRLF leaves a stray \r inside every parsed value.
+            [System.IO.File]::WriteAllText($envPath, "SECRET_KEY=$key`n")
+            Write-Host "Wrote a minimal server/.env with a freshly generated SECRET_KEY (value not logged)."
+          }
+
       - name: Redeploy
         shell: powershell
         env:
