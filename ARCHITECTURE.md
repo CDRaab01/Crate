@@ -142,6 +142,12 @@ the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeli
    Content failure ⇒ low-confidence empty draft (`scan_error="low_confidence"`);
    transport failure ⇒ `scan_error="identify_unavailable: …"` — the draft always
    survives with its photos.
+   The prompt also carries an **apparel block** (item_kind, department, size, size_type,
+   color, material, style, fit, sleeve_length) with one hard rule: report only what is
+   legible, never infer a size from how a garment looks. Unrecognized enums are dropped to
+   null rather than stored, so an unread tag surfaces as a completeness gap instead of a
+   confident wrong answer. There is deliberately no measurements field — a vision model
+   cannot use a tape measure, so measurements are human-entry-only.
    `LM_STUDIO_BASE_URL` is pinned in compose `environment:` as
    `http://host.docker.internal:1234/v1`. The config default (`localhost`) is correct only
    for bare-metal local dev — in the container localhost is the container, so relying on the
@@ -163,6 +169,66 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 (`ui/review/`) lists server drafts, re-polls while any is processing, edits via the
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
+
+## Apparel + archive completeness (archive-first round, 2026-08-12)
+
+Crate was specified around "photo to shipped package". Without an eBay keyset the pipeline
+still runs end to end minus pricing and posting (`price_item` is best-effort by design), so
+capture is usable today — which turns the app into a **wardrobe archive** first and a
+selling tool later. That reordering has one failure mode worth building against: size,
+material and measurements live on the garment's tag and on a tape measure, not in a photo.
+Once a shirt is folded into a bin, the only way to recover them is to unbox it.
+
+- `app/apparel/attributes.py` — controlled vocabularies (`DEPARTMENTS`, `SIZE_TYPES`,
+  `SLEEVE_LENGTHS`, `FITS`, `MEASUREMENT_KEYS`) plus `normalize_enum` (forgiving on shape:
+  "Big & Tall" → `big_tall`; strict on membership) and `normalize_measurements` (inches,
+  bounds-checked, unknown keys dropped, empty ⇒ None never `{}`). Size, color, material and
+  style stay **free text on purpose** — real tags say "Heather Grey" and "60% cotton".
+  These are Crate's enums, not eBay's: mapping to eBay aspect values happens in
+  `services/ebay/sell.py` when a keyset exists, rather than guessing the exact strings now.
+- `app/apparel/completeness.py` — pure, table-tested. `missing_for_listing` is everything
+  eBay will want; `missing_hand_only` is the urgent subset that needs the physical garment
+  (brand, size, size_type, department, material, measurements). Both are `[]` for
+  `item_kind="general"` — flagging "size" on a fishing lure would train the user to ignore
+  the indicator. Surfaced as computed fields on `ItemOut` per CLAUDE.md §9 (clients
+  display, never compute).
+- **Write paths differ deliberately.** The vision parser *degrades* — an unrecognized enum
+  becomes null and resurfaces as a gap. A hand `PATCH` *rejects* (422) — silently NULLing a
+  value the user believes they typed is worse than an error. `item_kind` is NOT NULL, so ""
+  clears the other enums but never blanks it.
+- Client: `ui/components/ApparelFields.kt` (garment summary line, measurement line, the
+  `ArchiveGapRow` nag, and the tag/tape edit dialog), wired into the review card and a
+  "Garment" panel on item detail. `storage_location` rides along because a registry that
+  cannot say which bin a sold shirt is in is not usable at ship time — which here is months
+  away.
+
+## Backups (archive-first round, 2026-08-12)
+
+`docker-compose.yml` puts the DB in the `pgdata` volume and item photos in the `photos`
+volume; the comment there claims only that they *survive redeploys*, which is true and was
+being read as a backup story. They do not survive `docker compose down -v`, a disk failure,
+or a host rebuild. Crate's registry is now the only record of a wardrobe that has been
+photographed, tagged, measured and boxed, so:
+
+- `deploy/backup.ps1` — host-side (Windows/Docker Desktop, same shape and conventions as
+  `redeploy.ps1`, including its ASCII-in-quoted-strings cp1252 rule). Writes a timestamped
+  set: `db.dump` (pg_dump `-Fc`), `photos.tar.gz` (the volume, read via `--volumes-from` so
+  the Compose-prefixed volume name is never guessed), and `MANIFEST.json`. `-BackupDir`
+  (or `CRATE_BACKUP_DIR`) should point at **other physical media** — a copy beside the
+  original is not a backup. `-Keep` prunes, but only after a verified-good new set exists,
+  so a failing run can never delete the last good backup.
+- **It verifies before claiming success**, because a trusted empty backup is worse than
+  none: both artifacts must be non-trivially sized, and the photo archive must hold at
+  least one file per `item_photos` row (originals are written to disk before their row is
+  committed, so files >= rows holds on any consistent set). A missing `photos.tar.gz` fails
+  unless `MANIFEST.json` records a deliberate `-SkipPhotos`.
+- **A dead Docker daemon and a corrupt archive both surface as exit 1** from `docker run`,
+  so the daemon is probed separately and tar failure is signalled as exit 3 from inside the
+  container. Getting that backwards would either condemn good backups or bless corrupt
+  ones. Infrastructure trouble is a warning; only a container that ran and failed marks the
+  set bad. The helper container is `postgres:16` (already pulled for the db service) so
+  verification needs no registry round trip and works offline.
+- `-Verify` re-checks the newest set without writing one. Restore steps: deploy/README.md.
 
 ## Auto price-drop scheduler (Phase 8, as built — the §9 documented exception)
 
@@ -297,14 +363,27 @@ loads carry auth + the host rewrite.
   Migration `0002` adds `brand`/`model` (they feed the Phase 3 template signature and must
   outlive the vision draft — an addition over the CLAUDE.md §4 sketch) and
   `processed_at`/`scan_error` (async scan-pipeline state).
+  Migration `0003` adds the apparel block — `item_kind` (`clothing|general`, NOT NULL,
+  server_default `general` so pre-existing rows are unchanged), `size`, `size_type`,
+  `department`, `color`, `material`, `style`, `fit`, `sleeve_length`, `measurements_in`
+  (JSON, inches, garment laid flat) and `storage_location`. A second addition over the §4
+  sketch, driven by the archive-first workflow: Crate photographs a wardrobe long before
+  the eBay keyset exists, and tag/tape data cannot be recovered from a stored photo once
+  the garment is boxed (see "Apparel + archive completeness").
 - `item_photos` — ordered per item; original_path/cleaned_path on the photos volume
   (DB stores paths only), ebay_url after EPS upload. Cascade with the item.
 - `sales` — one per eBay order (ebay_order_id unique): price/fees/date/buyer + address
   JSON, ship_status `pending|label_bought|shipped|delivered`, tracking/carrier/label.
 - `buyer_messages` — flagged inbox rows (item nullable — pre-sale questions), unique
   ebay_message_id for poller idempotency.
-- `duplicate_templates` — normalized-text signature (brand+model+category tokens, not
-  embeddings) + reusable title/description/category, use_count/last_used.
+- `duplicate_templates` — normalized-text signature (not embeddings) + reusable
+  title/description/category, use_count/last_used. General goods key on brand+model;
+  **clothing keys on brand+model+style+size+department and produces no signature at all
+  unless brand AND size are both known** (`matching/signature.py`). Garments seldom have a
+  "model", so the general key would degrade to a bare brand and collapse every shirt of a
+  brand into one template — which would then overwrite an unrelated garment's title at
+  capture time. Size is what makes reuse safe: the same style in M and L are different
+  listings with different item specifics.
 - `price_events` — audit trail for every drop (auto_drop|manual|floor_reached).
 - `ebay_credentials` — one row per user; access/refresh tokens stored encrypted
   (Fernet, Phase 5), sandbox|production environment tag.

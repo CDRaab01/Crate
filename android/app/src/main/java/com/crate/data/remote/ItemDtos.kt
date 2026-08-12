@@ -34,6 +34,23 @@ data class ItemDto(
     @SerialName("created_at") val createdAt: String,
     @SerialName("processed_at") val processedAt: String? = null,
     @SerialName("scan_error") val scanError: String? = null,
+    // Apparel item specifics. The server owns the vocabularies and the completeness
+    // computation (CLAUDE.md §9 - clients display, never compute); these two lists are
+    // what the archive-first workflow surfaces, so a garment never reaches a storage bin
+    // with its tag unread.
+    @SerialName("item_kind") val itemKind: String = "general",
+    val size: String? = null,
+    @SerialName("size_type") val sizeType: String? = null,
+    val department: String? = null,
+    val color: String? = null,
+    val material: String? = null,
+    val style: String? = null,
+    val fit: String? = null,
+    @SerialName("sleeve_length") val sleeveLength: String? = null,
+    @SerialName("measurements_in") val measurementsIn: Map<String, Double>? = null,
+    @SerialName("storage_location") val storageLocation: String? = null,
+    @SerialName("missing_for_listing") val missingForListing: List<String> = emptyList(),
+    @SerialName("missing_hand_only") val missingHandOnly: List<String> = emptyList(),
     val photos: List<ItemPhotoDto> = emptyList(),
 )
 
@@ -165,4 +182,18 @@ data class ItemUpdateRequest(
     @SerialName("weight_oz_est") val weightOzEst: String? = null,
     @SerialName("dims_in_est") val dimsInEst: Map<String, Double>? = null,
     @SerialName("weight_confirmed") val weightConfirmed: Boolean? = null,
+    // Apparel edits. Suite PATCH convention: null = untouched, "" = clear. Enum-valued
+    // fields (itemKind/sizeType/department/fit/sleeveLength) are validated server-side and
+    // 422 on an unknown value rather than degrading, so the UI offers fixed choices.
+    @SerialName("item_kind") val itemKind: String? = null,
+    val size: String? = null,
+    @SerialName("size_type") val sizeType: String? = null,
+    val department: String? = null,
+    val color: String? = null,
+    val material: String? = null,
+    val style: String? = null,
+    val fit: String? = null,
+    @SerialName("sleeve_length") val sleeveLength: String? = null,
+    @SerialName("measurements_in") val measurementsIn: Map<String, Double>? = null,
+    @SerialName("storage_location") val storageLocation: String? = null,
 )

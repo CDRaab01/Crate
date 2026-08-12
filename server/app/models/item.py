@@ -11,6 +11,10 @@ from app.database import Base
 #   draft -> active -> sold -> shipped, plus returned / delisted.
 ITEM_STATUSES = ("draft", "active", "sold", "shipped", "returned", "delisted")
 ITEM_CONDITIONS = ("new", "like_new", "good", "fair", "poor")
+# What kind of thing this is, which decides whether the apparel item-specifics apply. Set by
+# the vision pass and overridable by hand; "general" is the pre-clothing default so existing
+# rows keep their meaning after migration 0003.
+ITEM_KINDS = ("clothing", "general")
 
 
 class Item(Base):
@@ -32,6 +36,28 @@ class Item(Base):
     category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # eBay category
     condition: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft")
+
+    # --- Apparel item specifics (migration 0003) -----------------------------------------
+    # Crate archives a wardrobe long before the eBay keyset exists, so these are captured at
+    # photo time and validated by app.apparel: what the tag says (size/material/department)
+    # and what a tape measure says (measurements_in) cannot be recovered from a stored photo
+    # once the garment is boxed. Free-text where real tags are free-text; enums only where a
+    # controlled value is genuinely knowable (see apparel/attributes.py).
+    item_kind: Mapped[str] = mapped_column(String(16), default="general", server_default="general")
+    size: Mapped[str | None] = mapped_column(String(32), nullable=True)  # tag text: "M", "32x34"
+    size_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # SIZE_TYPES
+    department: Mapped[str | None] = mapped_column(String(16), nullable=True)  # DEPARTMENTS
+    color: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    material: Mapped[str | None] = mapped_column(String(96), nullable=True)  # "60% cotton..."
+    style: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "Polo", "Button-Up"
+    fit: Mapped[str | None] = mapped_column(String(16), nullable=True)  # FITS
+    sleeve_length: Mapped[str | None] = mapped_column(String(16), nullable=True)  # SLEEVE_LENGTHS
+    # Inches, garment laid flat, over MEASUREMENT_KEYS. Human-entered only — a vision model
+    # cannot measure, and a guessed measurement is a returned item.
+    measurements_in: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Where the physical item actually is ("Bin 3", "Closet A shelf 2"). The registry is
+    # useless at ship time if a sold shirt can't be found, and that is months away here.
+    storage_location: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     quick_sale_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     patient_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)

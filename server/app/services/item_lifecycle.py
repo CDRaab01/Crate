@@ -10,7 +10,7 @@ import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.matching.signature import build_signature
+from app.matching.signature import signature_for_item
 from app.models.duplicate_template import DuplicateTemplate
 from app.models.item import Item
 
@@ -50,8 +50,9 @@ async def transition(db: AsyncSession, item: Item, new_status: str) -> Item:
 
 async def _upsert_template(db: AsyncSession, item: Item, now: datetime.datetime) -> None:
     """A sold item becomes (or refreshes) a duplicate template — the reuse-on-capture
-    fast path. No signature (no brand/model) ⇒ nothing to match on later ⇒ no template."""
-    signature = build_signature(item.brand, item.model)
+    fast path. No signature ⇒ nothing to match on later ⇒ no template (for clothing that
+    means no brand or no size — see build_apparel_signature)."""
+    signature = signature_for_item(item)
     if signature is None or not item.title:
         return
 

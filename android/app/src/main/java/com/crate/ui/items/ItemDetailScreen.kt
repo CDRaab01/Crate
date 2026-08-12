@@ -30,6 +30,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.data.remote.ItemDto
+import com.crate.data.remote.ItemUpdateRequest
+import com.crate.ui.components.ArchiveGapRow
+import com.crate.ui.components.GarmentDetailsDialog
+import com.crate.ui.components.apparelSummary
+import com.crate.ui.components.fieldLabel
+import com.crate.ui.components.measurementSummary
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.UiState
 import design.pulse.ui.components.ChannelDot
@@ -100,6 +109,7 @@ fun ItemDetailScreen(
                     onShip = onShip,
                     onDelist = { viewModel.delist {} },
                     onRelist = { viewModel.relist {} },
+                    onSave = { update, done -> viewModel.saveEdits(update, done) },
                 )
             }
         }
@@ -114,7 +124,9 @@ internal fun Detail(
     onShip: (String) -> Unit,
     onDelist: () -> Unit = {},
     onRelist: () -> Unit = {},
+    onSave: (ItemUpdateRequest, (Boolean) -> Unit) -> Unit = { _, _ -> },
 ) {
+    var editingGarment by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -162,6 +174,51 @@ internal fun Detail(
         if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium)
 
         item.description?.let { PanelCard { Text(it, style = MaterialTheme.typography.bodyMedium) } }
+
+        // Garment panel: the archive record for a piece of clothing. Sits above pricing
+        // because until the eBay keyset exists this IS the product — the tag and tape
+        // readings are the part that cannot be reconstructed later.
+        if (item.itemKind == "clothing") {
+            SectionHeader(label = "Garment", channel = CrateTheme.colors.copper.base)
+            PanelCard {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val garment = apparelSummary(item)
+                    Text(
+                        garment.ifBlank { "No tag details recorded yet" },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    measurementSummary(item).takeIf { it.isNotBlank() }?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    item.material?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    item.storageLocation?.let {
+                        Spacer(Modifier.size(4.dp))
+                        Text("Stored in $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (item.missingHandOnly.isNotEmpty()) {
+                        Spacer(Modifier.size(4.dp))
+                        ArchiveGapRow(item)
+                    } else if (item.missingForListing.isNotEmpty()) {
+                        Spacer(Modifier.size(4.dp))
+                        Text(
+                            "Still to fill in: " +
+                                item.missingForListing.joinToString(", ") { fieldLabel(it) },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.size(4.dp))
+                    PulseButton(
+                        text = "Edit garment details",
+                        onClick = { editingGarment = true },
+                        compact = true,
+                        tonal = true,
+                    )
+                }
+            }
+        }
 
         SectionHeader(label = "Pricing", channel = CrateTheme.colors.pricing.base)
         PanelCard {
@@ -301,6 +358,14 @@ internal fun Detail(
                 compact = true,
             )
         }
+    }
+
+    if (editingGarment) {
+        GarmentDetailsDialog(
+            item = item,
+            onSave = { update -> onSave(update) { ok -> if (ok) editingGarment = false } },
+            onCancel = { editingGarment = false },
+        )
     }
 }
 
