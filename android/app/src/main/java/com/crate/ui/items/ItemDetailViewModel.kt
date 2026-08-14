@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.ItemDto
+import com.crate.data.remote.ItemUpdateRequest
 import com.crate.data.remote.PriceEventDto
 import com.crate.data.remote.SaleDto
 import com.crate.util.UiState
@@ -33,6 +34,20 @@ class ItemDetailViewModel @Inject constructor(
 
     init {
         refresh()
+    }
+
+    /** Registry-side edits — chiefly the tag/tape fields and storage location, which are
+     * routinely filled in long after capture (the garment comes back out of a bin, or a
+     * measurement gets corrected). Same PATCH the review stack uses. */
+    fun saveEdits(update: ItemUpdateRequest, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                _item.value = UiState.Success(api.updateItem(itemId, update))
+                onDone(true)
+            } catch (e: Exception) {
+                onDone(false)
+            }
+        }
     }
 
     /** Explicit listing writes (never automated): withdraw or republish the offer. */

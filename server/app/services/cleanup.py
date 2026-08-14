@@ -62,10 +62,39 @@ def _shrink(image: Image.Image) -> Image.Image:
     return image
 
 
+def _levels(image: Image.Image) -> Image.Image:
+    """Gentle levels: clip 1% shadows/highlights — brightens typical indoor phone shots
+    without the lying-about-condition look of aggressive filters.
+
+    `preserve_tone=True` derives ONE mapping from luminance instead of stretching each RGB
+    channel against its own endpoints. Per-channel is what "auto levels" usually means, but
+    it is wrong here: a saturated garment on a neutral ground drives each channel's endpoints
+    differently, so the correction pushes a complementary cast into the background (a red
+    shirt turned the backdrop teal) and shifts the garment's own hue — and `color` is an item
+    specific this app records and lists on.
+    """
+    return ImageOps.autocontrast(image, cutoff=1, preserve_tone=True)
+
+
 def clean_photo(image_bytes: bytes) -> bytes:
     """Original bytes → cleaned PNG bytes. Never raises on bad model output — worst case
-    is an autocontrast-only pass of the original."""
-    cutout = _remove_background(image_bytes)
+    is a levels-only pass of the original.
+
+    Order matters: levels are applied to the ORIGINAL photo, before any background
+    replacement. Applying them afterwards reads the histogram of a synthetic composite —
+    the garment plus a field of pure white — in which the garment is by definition the
+    darkest content, so the 1% clip lands on the garment itself and maps it toward black.
+    On a flat, evenly lit tee that was total: every colourway, including a light heather
+    grey, came out pure black. Correcting the capture's exposure and then compositing keeps
+    the white ground white and leaves the garment where the camera saw it.
+    """
+    corrected = _levels(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
+
+    # rembg segments the exposure-corrected photo; re-encoded losslessly so the model sees
+    # exactly what we will composite from.
+    corrected_bytes = io.BytesIO()
+    corrected.save(corrected_bytes, format="PNG")
+    cutout = _remove_background(corrected_bytes.getvalue())
 
     if cutout is not None and cutout.getchannel("A").getbbox() is not None:
         subject = _crop_to_subject(cutout)
@@ -73,12 +102,9 @@ def clean_photo(image_bytes: bytes) -> bytes:
         canvas.paste(subject, mask=subject.getchannel("A"))
         cleaned = canvas
     else:
-        cleaned = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        cleaned = corrected
 
     cleaned = _shrink(cleaned)
-    # Gentle levels: clip 1% shadows/highlights — brightens typical indoor phone shots
-    # without the lying-about-condition look of aggressive filters.
-    cleaned = ImageOps.autocontrast(cleaned, cutoff=1)
 
     out = io.BytesIO()
     cleaned.save(out, format="PNG")

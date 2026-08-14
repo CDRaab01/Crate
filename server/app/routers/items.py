@@ -38,6 +38,26 @@ router = APIRouter(prefix="/items", tags=["items"])
 
 MAX_SCAN_PHOTOS = 8
 
+# Nullable text fields where the suite's ""-clears convention applies (see update_item).
+CLEARABLE_TEXT_FIELDS = frozenset(
+    {
+        "title",
+        "description",
+        "brand",
+        "model",
+        "category_id",
+        "size",
+        "color",
+        "material",
+        "style",
+        "storage_location",
+    }
+)
+# Apparel enums + measurements: normalized/validated separately, so the generic PATCH loop
+# skips them rather than writing the raw request value through.
+APPAREL_ENUM_FIELDS = ("item_kind", "size_type", "department", "fit", "sleeve_length")
+VALIDATED_FIELDS = frozenset({*APPAREL_ENUM_FIELDS, "measurements_in"})
+
 
 async def _owned_item(db: AsyncSession, user_id: uuid.UUID, item_id: uuid.UUID) -> Item:
     item = (
@@ -133,6 +153,7 @@ async def update_item(
     item = await _owned_item(db, user.id, item_id)
     try:
         req.validated_condition()
+        enums = req.validated_enums()
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
 
@@ -141,11 +162,27 @@ async def update_item(
     # explicit nulls.
     fields = req.model_dump(exclude_none=True)
     for name, value in fields.items():
-        if name in ("title", "description", "brand", "model", "category_id") and value == "":
+        if name in VALIDATED_FIELDS:  # applied below, already normalized
+            continue
+        if name in CLEARABLE_TEXT_FIELDS and value == "":
             value = None
-        if name == "dims_in_est" and value is not None:
+        if name == "dims_in_est":
             value = dict(value)
-        setattr(item, name if name != "dims_in_est" else "dims_in_est", value)
+        setattr(item, name, value)
+
+    # Enums land normalized ("Big & Tall" -> "big_tall"); an empty string clears them, except
+    # item_kind which is NOT NULL and so only ever moves between known kinds.
+    for name in APPAREL_ENUM_FIELDS:
+        raw = getattr(req, name)
+        if raw == "" and name != "item_kind":
+            setattr(item, name, None)
+        elif name in enums:
+            setattr(item, name, enums[name])
+    # An explicitly-sent measurements body applies normalized; all-empty clears (the generic
+    # loop can't express that, since "nothing measured" normalizes to None).
+    if req.measurements_in is not None:
+        item.measurements_in = req.validated_measurements()
+
     await db.commit()
     return await _owned_item(db, user.id, item_id)
 

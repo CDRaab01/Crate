@@ -11,7 +11,8 @@ import re
 
 from pydantic import BaseModel
 
-from app.models.item import ITEM_CONDITIONS
+from app.apparel import DEPARTMENTS, FITS, SIZE_TYPES, SLEEVE_LENGTHS, normalize_enum
+from app.models.item import ITEM_CONDITIONS, ITEM_KINDS
 
 MAX_TITLE = 80  # eBay's title cap
 MAX_DESCRIPTION = 4000
@@ -24,8 +25,26 @@ NO_ITEM_NOTE = (
 IDENTIFY_SYSTEM_PROMPT = (
     "You are an item-identification assistant for an eBay selling app. You look at photos "
     "of a single item for sale and identify it for a listing: what it is, brand and model "
-    "if visible, apparent condition, and a shipping weight/size estimate. You only output "
+    "if visible, apparent condition, and a shipping weight/size estimate. When the item is "
+    "clothing you also read its care/size tag if a photo shows one. You only output "
     "JSON — never prose, never Markdown, never an explanation."
+)
+
+# Apparel block: only meaningful when item_kind == "clothing", null throughout otherwise.
+# The hard rule is the last line — a hallucinated size ships the wrong garment to a buyer,
+# and the whole archive-first workflow depends on "unknown" being reported as unknown so
+# app.apparel.completeness can tell the user to go read the tag while the item is in hand.
+_APPAREL_PROMPT_BLOCK = (
+    '"item_kind": one of "clothing"|"general" ("clothing" for any wearable garment, '
+    "including shirts, pants, dresses, outerwear and footwear), "
+    '"department": one of "mens"|"womens"|"unisex"|"boys"|"girls" or null, '
+    '"size": string or null (EXACTLY as printed on the tag, e.g. "M", "32x34", "10.5"), '
+    '"size_type": one of "regular"|"petite"|"plus"|"big_tall"|"juniors"|"maternity" or null, '
+    '"color": string or null (the main colorway, e.g. "Navy", "Heather Grey"), '
+    '"material": string or null (the fabric content as printed, e.g. "100% Cotton"), '
+    '"style": string or null (garment style, e.g. "Polo", "Button-Up", "Crewneck Tee"), '
+    '"fit": one of "slim"|"regular"|"relaxed"|"oversized" or null, '
+    '"sleeve_length": one of "sleeveless"|"short"|"three_quarter"|"long" or null, '
 )
 
 IDENTIFY_USER_PROMPT = (
@@ -43,11 +62,14 @@ IDENTIFY_USER_PROMPT = (
     '"weight_oz": number or null (estimated SHIPPING weight in ounces, including typical '
     "packaging), "
     '"dims_in": {"l": number, "w": number, "h": number} or null (estimated boxed size in '
-    "inches), "
-    '"confidence": one of "high"|"medium"|"low"'
+    "inches), " + _APPAREL_PROMPT_BLOCK + '"confidence": one of "high"|"medium"|"low"'
     "}\n"
-    "Be honest about condition — buyers return items that were oversold. If you cannot "
-    "identify any item at all, respond with exactly {} and nothing else."
+    "Be honest about condition — buyers return items that were oversold. "
+    "For the clothing fields, report ONLY what you can actually read or plainly see. If no "
+    "tag is legible in the photos, set size, size_type and material to null — NEVER infer a "
+    "garment's size from how it looks. A wrong size is a returned item; a null just means a "
+    "human reads the tag. Never estimate measurements; there is no field for them. "
+    "If you cannot identify any item at all, respond with exactly {} and nothing else."
 )
 
 
@@ -61,6 +83,18 @@ class IdentifyDraft(BaseModel):
     description: str | None = None
     weight_oz: float | None = None
     dims_in: dict | None = None
+    # Apparel block — all null for general goods. Note there is deliberately no
+    # measurements field: a vision model cannot use a tape measure, so measurements are
+    # human-entry-only (app.apparel.completeness nags for them).
+    item_kind: str = "general"
+    department: str | None = None
+    size: str | None = None
+    size_type: str | None = None
+    color: str | None = None
+    material: str | None = None
+    style: str | None = None
+    fit: str | None = None
+    sleeve_length: str | None = None
     confidence: str = "low"
 
 
@@ -156,6 +190,11 @@ def parse_identify(raw_text: str) -> IdentifyDraft | None:
     if title is None and description is None:
         return None
 
+    # Apparel: enums are dropped (not rejected) when unrecognized — same degrade-don't-die
+    # contract as the rest of this parser. item_kind falls back to "general", so a model that
+    # ignores the block entirely yields exactly the pre-apparel behaviour.
+    item_kind = normalize_enum(data.get("item_kind"), ITEM_KINDS) or "general"
+
     return IdentifyDraft(
         title=title,
         brand=_clean_str(data.get("brand"), 64),
@@ -166,5 +205,14 @@ def parse_identify(raw_text: str) -> IdentifyDraft | None:
         description=description,
         weight_oz=weight,
         dims_in=_coerce_dims(data.get("dims_in")),
+        item_kind=item_kind,
+        department=normalize_enum(data.get("department"), DEPARTMENTS),
+        size=_clean_str(data.get("size"), 32),
+        size_type=normalize_enum(data.get("size_type"), SIZE_TYPES),
+        color=_clean_str(data.get("color"), 48),
+        material=_clean_str(data.get("material"), 96),
+        style=_clean_str(data.get("style"), 64),
+        fit=normalize_enum(data.get("fit"), FITS),
+        sleeve_length=normalize_enum(data.get("sleeve_length"), SLEEVE_LENGTHS),
         confidence=confidence,
     )

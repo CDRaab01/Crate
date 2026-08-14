@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
-from app.matching.signature import build_signature
+from app.matching.signature import signature_for_item
 from app.models.duplicate_template import DuplicateTemplate
 from app.models.item import Item
 from app.pricing.service import price_item
@@ -65,13 +65,28 @@ async def process_item(item_id: uuid.UUID) -> None:
             if draft.weight_oz is not None:
                 item.weight_oz_est = round(draft.weight_oz, 2)
             item.dims_in_est = draft.dims_in
+
+            # Apparel specifics: whatever the tag actually showed. Nulls are meaningful here
+            # — they are what missing_hand_only reports, i.e. "go read the tag before this
+            # goes in a bin". measurements_in is never AI-set; a tape measure is human work.
+            item.item_kind = draft.item_kind
+            item.department = draft.department
+            item.size = draft.size
+            item.size_type = draft.size_type
+            item.color = draft.color
+            item.material = draft.material
+            item.style = draft.style
+            item.fit = draft.fit
+            item.sleeve_length = draft.sleeve_length
+
             if draft.confidence == "low":
                 item.scan_error = "low_confidence"
 
-            # Duplicate fast-path: a matching template (same brand+model sold before) wins
+            # Duplicate fast-path: a matching template (the same thing sold before — see
+            # signature_for_item, which keys clothing on brand+style+size) wins
             # the sellable copy — identification ran only to confirm the match. The client
             # badges template_id != null as "from template — previously sold N times".
-            signature = build_signature(item.brand, item.model)
+            signature = signature_for_item(item)
             if signature is not None:
                 template = (
                     await db.execute(

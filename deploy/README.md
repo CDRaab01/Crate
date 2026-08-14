@@ -23,4 +23,59 @@ long-form runner guide). Crate-specific facts:
   dragonfly-id `/smoke/token` (crate-smoke, allowlisted subject
   `crate-smoke@dragonflymedia.org`) → `/auth/suite` → `/users/me`.
 - **Volumes that must survive redeploys:** `pgdata` (Postgres) and `photos`
-  (`/data/photos` — item photo binaries; the DB stores paths only).
+  (`/data/photos` — item photo binaries; the DB stores paths only). Surviving a redeploy
+  is *not* a backup — see below.
+
+## Backups
+
+Named volumes survive `docker compose up`, but not `down -v`, a dead disk, or a host
+rebuild. Crate's registry is the only record of items that have been photographed,
+measured and boxed, so run `deploy/backup.ps1` on the host:
+
+```powershell
+# One-off, to other physical media (a NAS share, an external drive):
+powershell deploy/backup.ps1 -BackupDir \\nas\backups\crate
+
+# Or set CRATE_BACKUP_DIR once and just run it:
+powershell deploy/backup.ps1
+
+# Nightly at 02:30 (needs Docker Desktop running; runs as the interactive user):
+schtasks /create /tn "Crate backup" /sc daily /st 02:30 /tr ^
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Code\Crate\deploy\backup.ps1"
+```
+
+Each run writes `<BackupDir>\crate-YYYYMMDD-HHmmss\` containing `db.dump`,
+`photos.tar.gz` and `MANIFEST.json`, verifies them, and prunes to `-Keep` (default 14)
+*only after* the new set verifies — a failing run never deletes the last good backup.
+`powershell deploy/backup.ps1 -Verify` re-checks the newest set; use it to confirm a
+scheduled job is really producing restorable output rather than silently writing stubs.
+
+### Restoring from a backup
+
+Restore is not exercised by CI, so **rehearse it once against a throwaway Compose project
+before you need it.** With the stack running and `$Set` pointing at a backup folder:
+
+```powershell
+$Set = "\\nas\backups\crate\crate-20260812-023000"
+
+# 1. Database. --clean --if-exists drops the existing objects first, so this REPLACES
+#    current data. Stop the server container so nothing writes mid-restore.
+docker compose stop server
+Get-Content "$Set\db.dump" -AsByteStream |
+  docker compose exec -T db pg_restore -U crate -d crate --clean --if-exists
+docker compose start server
+
+# 2. Photos, back into the volume the server container mounts.
+$serverId = docker compose ps -q server
+docker run --rm --volumes-from $serverId -v "${Set}:/backup:ro" postgres:16 `
+  sh -c "rm -rf /data/photos/* && tar xzf /backup/photos.tar.gz -C /data/photos"
+```
+
+Then confirm: `GET /health` is ok, `GET /version` reports `Crate API`, and an item's
+photo endpoint (`/items/{id}/photos/{pid}/file`) returns a real image — that last check is
+the one that proves the DB paths and the restored binaries line up.
+
+A restore onto a **newer** schema is fine: migrations run on container boot, so restore
+first, then let the entrypoint's `alembic upgrade head` catch the data up. Restoring a
+*newer* dump onto older code is not supported — check `MANIFEST.json`'s
+`deployed_commit` if the two might disagree.

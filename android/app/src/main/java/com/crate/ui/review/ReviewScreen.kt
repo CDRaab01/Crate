@@ -40,6 +40,10 @@ import coil.compose.AsyncImage
 import com.crate.BuildConfig
 import com.crate.data.remote.ItemDto
 import com.crate.data.remote.ItemUpdateRequest
+import com.crate.ui.components.ArchiveGapRow
+import com.crate.ui.components.GarmentDetailsDialog
+import com.crate.ui.components.apparelSummary
+import com.crate.ui.components.measurementSummary
 import com.crate.ui.theme.CrateTheme
 import com.crate.util.OnResumeEffect
 import com.crate.util.UiState
@@ -136,6 +140,7 @@ internal fun DraftCard(
     onPost: ((String?) -> Unit) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var editingGarment by remember { mutableStateOf(false) }
     var customPrice by remember { mutableStateOf(false) }
     var postError by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
@@ -191,7 +196,17 @@ internal fun DraftCard(
                     if (subtitle.isNotBlank()) {
                         Text(subtitle, style = MaterialTheme.typography.bodySmall)
                     }
+                    val garment = apparelSummary(item)
+                    if (garment.isNotBlank()) {
+                        Text(garment, style = MaterialTheme.typography.bodySmall)
+                    }
+                    val measured = measurementSummary(item)
+                    if (measured.isNotBlank()) {
+                        Caption(text = measured)
+                    }
                 }
+                // The archive-first nag: what still needs the garment physically in hand.
+                ArchiveGapRow(item)
                 item.description?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 4)
                 }
@@ -277,6 +292,19 @@ internal fun DraftCard(
                     )
                     PulseButton(text = "Dismiss", onClick = onDismiss, compact = true, tonal = true)
                 }
+                // Second row: the tag/tape fields. Offered for every draft (a general good
+                // reclassified as clothing needs a way in), but labelled by urgency so an
+                // incomplete garment reads as unfinished rather than merely editable.
+                PulseButton(
+                    text = if (item.missingHandOnly.isNotEmpty()) {
+                        "Add tag + measurements"
+                    } else {
+                        "Garment details"
+                    },
+                    onClick = { editingGarment = true },
+                    compact = true,
+                    tonal = true,
+                )
                 if (item.chosenPrice == null) {
                     Text(
                         "Pick a price to enable posting.",
@@ -311,6 +339,14 @@ internal fun DraftCard(
             item = item,
             onSave = { update -> onSave(update) { ok -> if (ok) editing = false } },
             onCancel = { editing = false },
+        )
+    }
+
+    if (editingGarment) {
+        GarmentDetailsDialog(
+            item = item,
+            onSave = { update -> onSave(update) { ok -> if (ok) editingGarment = false } },
+            onCancel = { editingGarment = false },
         )
     }
 }
