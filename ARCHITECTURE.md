@@ -202,6 +202,43 @@ Once a shirt is folded into a bin, the only way to recover them is to unbox it.
   cannot say which bin a sold shirt is in is not usable at ship time — which here is months
   away.
 
+## Photo pipeline verification (2026-08-14)
+
+Until this round every scan test uploaded `b"\x89PNG...fakebytes"` with `clean_photo`
+monkeypatched to a passthrough, so nothing in the suite ever decoded a pixel — the cleanup,
+storage and serving code was covered only by its own signature.
+
+- `tests/fixtures/images.py` — real, decodable garment/product/tag samples built with Pillow
+  (no binaries in git, deterministic, self-documenting). `python -m tests.fixtures.images
+  <dir>` writes them out to look at. They carry seeded noise, one-sided lighting falloff and
+  a blown highlight **on purpose**: a flat two-tone fixture is its own histogram minimum, so
+  it makes level-related assertions fail for reasons that never occur on a real photo.
+- `tests/test_photo_pipeline.py` — real JPEG/PNG/WebP through the real endpoint and the real
+  cleanup: decode, format round-trip, downscale, multi-angle order, the served binary, the
+  corrupt-upload degrade, and the whole archive-completion loop. rembg stays disabled (CI must
+  never fetch U2-Net); the removal branch is exercised by stubbing `_remove_background` with a
+  genuine RGBA cutout, so crop-to-subject and the white composite run on actual pixels.
+- `scripts/photo_smoke.py` — the part tests cannot do: send **real photographs** at a running
+  Crate and read what Gemma made of them. `--dir` for your own photos, `--each-file` for one
+  item per shot, `--samples` for the synthetic set (plumbing only). A draft that comes back
+  with a `scan_error` fails the run — a smoke that passes while LM Studio is unreachable is
+  worse than no smoke — with `--allow-scan-errors` for a deliberate plumbing-only check.
+  `CRATE_ACCESS_TOKEN` skips the dragonfly-id round trip for local runs.
+
+**Defect found and fixed by these tests — levels order of operations.** `clean_photo` applied
+`ImageOps.autocontrast(cutoff=1)` *after* background replacement, i.e. to a composite of the
+garment plus a field of pure white. `cutoff=1` clips the darkest one percent of pixels **by
+count**, and in that composite the garment is by definition the darkest content, so the clip
+landed on the garment and mapped it toward black: on a flat, evenly lit tee every colourway —
+including a light heather grey — came back pure `(0, 0, 0)`. The per-channel stretch also
+drove a complementary cast into the ground (a red shirt turned the backdrop teal), which
+matters because eBay wants a white background and `color` is an item specific Crate records.
+Levels now run on the **original capture**, before any compositing, with `preserve_tone=True`
+so one luminance-derived mapping applies to all three channels. Guarded by
+`test_white_replacement_never_blackens_the_garment`,
+`test_white_replacement_leaves_the_background_pure_white`, `test_cleanup_keeps_the_garment_hue`
+and `test_levels_still_lift_an_underexposed_capture`.
+
 ## Backups (archive-first round, 2026-08-12)
 
 `docker-compose.yml` puts the DB in the `pgdata` volume and item photos in the `photos`
