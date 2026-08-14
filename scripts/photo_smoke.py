@@ -258,6 +258,7 @@ def main() -> None:
     print(f"Sending {len(groups)} item(s) from {directory} to {CRATE_URL}\n")
 
     failures = 0
+    scan_errors: list[tuple[str, str]] = []
     for index, photos in enumerate(groups, start=1):
         names = ", ".join(p.name for p in photos)
         print(f"[{index}/{len(groups)}] {names}")
@@ -286,6 +287,7 @@ def main() -> None:
         # reporting PHOTO_SMOKE_PASS with LM Studio unreachable would make the smoke a lie.
         if item.get("scan_error") and not args.allow_scan_errors:
             failures += 1
+            scan_errors.append((names, item["scan_error"]))
         if not args.keep:
             request("DELETE", f"{CRATE_URL}/items/{item_id}", token=token)
         else:
@@ -294,12 +296,26 @@ def main() -> None:
 
     if failures:
         print(f"[FAIL] {failures} of {len(groups)} item(s) failed")
-        print(
-            "  scan_error 'identify_unavailable' => LM Studio is unreachable from the server.\n"
-            "  Inside the container localhost is the container: LM_STUDIO_BASE_URL should be\n"
-            "  http://host.docker.internal:1234/v1. Check GET :1234/v1/models for the model\n"
-            "  that is actually loaded (LM_STUDIO_VISION_MODEL must match)."
-        )
+        for names, err in scan_errors:
+            print(f"  {names}: {err}")
+        # Print the remediation that actually matches what went wrong. The hint below used
+        # to be printed unconditionally, so a 'low_confidence' draft — the ordinary, correct
+        # outcome for a photo of a whole clothing rack — read as "LM Studio is unreachable"
+        # and sent you debugging container networking that was working fine.
+        if any(e.startswith("identify_unavailable") for _, e in scan_errors):
+            print(
+                "\n  'identify_unavailable' => the server could not reach LM Studio.\n"
+                "  Inside the container localhost is the container: LM_STUDIO_BASE_URL should be\n"
+                "  http://host.docker.internal:1234/v1. Check GET :1234/v1/models for the model\n"
+                "  that is actually loaded (LM_STUDIO_VISION_MODEL must match)."
+            )
+        if any(e == "low_confidence" for _, e in scan_errors):
+            print(
+                "\n  'low_confidence' => LM Studio answered, but could not identify one item\n"
+                "  in those photos. Usually the photo shows several items (a rack, a pile) or\n"
+                "  the item is unclear — reshoot one item against a plain background. Pass\n"
+                "  --allow-scan-errors to treat this as a pass."
+            )
         sys.exit(1)
     print(f"PHOTO_SMOKE_PASS ({len(groups)} item(s))")
     sys.exit(0)

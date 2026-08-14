@@ -430,9 +430,12 @@ is mocked in CI per §8.
      the **marketplace-account-deletion exemption**) → `EBAY_ENVIRONMENT=production`.
   2. One-time seller setup: business policies (`EBAY_*_POLICY_ID`) +
      `EBAY_LOCATION_POSTAL_CODE`; `FERNET_KEY`; Shippo key + `SHIP_FROM_*`.
-  3. Deploy: `crate` runner + `CRATE_DIR` variable, Tailscale Serve, ntfy topic,
-     `crate-smoke` secret in dragonfly-id's `SMOKE_CLIENTS` (+ same value in Crate's
-     `.env` for the smoke), Dragonfly `ServiceRegistry` row once the URL is real.
+  3. Deploy: ~~`crate` runner + `CRATE_DIR` variable~~ **(DONE — runner registered with the
+     `crate` label, `vars.CRATE_DIR` set 2026-07-26, first green Deploy 2026-08-14)**,
+     ~~Tailscale Serve~~ **(DONE — `:8446`)**, ntfy topic, ~~`crate-smoke` secret in
+     dragonfly-id's `SMOKE_CLIENTS` (+ same value in Crate's `.env` for the smoke)~~
+     **(DONE — the smoke mints tokens against `id` and passes)**, Dragonfly
+     `ServiceRegistry` row once the URL is real.
   4. On-device pass (camera flow, AppAuth redirect, label PDF share) — CI builds are
      the gate until the phone is in hand. Roborazzi baselines **recorded 2026-07-25**
      (`com.crate.screenshot.ScreenshotTest`, 12 PNGs under `android/app/screenshots/`:
@@ -480,3 +483,107 @@ additive `HomeViewModel` + `SettingsViewModel.user` (both on existing endpoints)
   a capture confirms via snackbar; (4) tab navigation anchors `popUpTo(Home)` instead of
   the graph start (Gate pops itself, so the old anchor was a no-op and tabs piled up on
   the back stack — back now always lands on Home, then exits).
+
+## Archive-first round (2026-08-12 → 08-14) — apparel capture, real backups, real-image tests
+
+Landed as `04712c8` (#12). Premise: with no eBay keyset yet, Crate's near-term job is a
+**wardrobe archive**, and the data that only exists on the physical garment — the tag and the
+tape measure — is gone the moment the item is boxed. So capture it while the garment is in hand.
+Details in ARCHITECTURE.md (§"Apparel + archive completeness", §"Backups",
+§"Photo pipeline verification"); this entry is the summary that was missing from CLAUDE.md.
+
+- **Apparel item specifics:** migration `0003` adds `item_kind`, `size`, `size_type`,
+  `department`, `color`, `material`, `style`, `fit`, `sleeve_length`, `measurements_in`,
+  `storage_location`. `app/apparel/` holds the pure logic — `attributes.py` (controlled
+  vocabularies, forgiving-shape/strict-membership `normalize_enum`, bounds-checked
+  `normalize_measurements`) and `completeness.py` (`missing_for_listing` vs the urgent
+  `missing_hand_only`). Both surface as `@computed_field`s on `ItemOut` (§9: clients display,
+  never compute). **Deliberate write-path asymmetry:** vision output degrades (unknown enum →
+  null), a hand `PATCH` rejects (422).
+- **Backups:** `deploy/backup.ps1` writes a timestamped `db.dump` + `photos.tar.gz` +
+  `MANIFEST.json` outside Docker, verifies before claiming success, and prunes to `-Keep` only
+  after the new set verifies. Restore runbook in `deploy/README.md`.
+- **Real-image pipeline tests:** `tests/fixtures/images.py` (Pillow-built, no binaries in git)
+  + `tests/test_photo_pipeline.py`, plus `scripts/photo_smoke.py` for driving real photographs
+  at a running server. Every earlier scan test uploaded fake PNG bytes with `clean_photo`
+  monkeypatched, so no pixel had ever been decoded.
+- **The defect those tests caught:** `clean_photo` ran `autocontrast` *after* white-background
+  replacement, so the garment — the darkest content in that composite — was clipped to
+  `(0,0,0)` in every colourway, with a colour cast pushed into the background. Levels now run
+  on the original capture with `preserve_tone=True`, before compositing.
+- **Verified at the time:** 271 pytest green + ruff clean; CI green. Everything below was
+  explicitly *not* verifiable in the build container (no U2-Net, no LM Studio, no Docker
+  daemon) and carried forward — which is what the next round is about.
+
+## Verification round (2026-08-14) — proving the untested half on the real host
+
+No new features. The archive-first round shipped three things it could not exercise, so this
+round ran them against the live Dragonfly host (rembg with real U2-Net weights, real LM Studio
+serving `google/gemma-4-e4b`, a real Docker daemon) using **19 permissively-licensed real
+photographs** (Wikimedia/Unsplash CC0–CC BY-SA) downscaled to the client's ≤1600px contract.
+Photos stayed in a scratchpad — no binaries in git, per the fixtures design.
+
+- **rembg segmentation: works on real photographs.** Across 17 scanned items, 15 came back with
+  4/4 pure-white corners and a tight crop-to-subject; the two partials were a clothing *rack*
+  (~30 garments — no single subject to segment, correctly) and a flat label close-up.
+- **The levels fix holds on real pixels.** The dark-navy denim control went from a grey backdrop
+  at centre-mean `(41,45,54)` to `(72,77,87)` on pure white with **0.03% pure-black**; the
+  black-dress case kept its tone and fabric folds. Highest pure-black in any cleaned output was
+  0.66%, and that was legitimate black text on a label. The blackening defect is genuinely gone.
+- **Real Gemma returns usable JSON** — ~15 s per item, well inside the 60 s `lm_studio_timeout`,
+  parsed by `parse_identify` without salvage drama. Worth recording: gemma-4 **is** a reasoning
+  model here and returns `reasoning_content` alongside `content`, so `_chat_vision` reading only
+  `content` is correct — and `vision.py` deliberately setting **no `max_tokens`** is what keeps
+  it safe. An answer-sized cap would let hidden reasoning tokens eat the budget and silently
+  return `""`, which the parser would read as "unidentifiable" (the suite-wide gemma-4 trap).
+- **The size invariant holds, and an attempt to "improve" it was rejected on evidence.**
+  Ground truth was read by eye off 8 tag photographs (X-LARGE; 中/小/大; a circled `S` in an
+  `XS S M L XL XXL` run; `EUR 30 / US 30`; two brand/care-only negative controls). Measured
+  over 3 runs of an A/B harness driving the **real** `build_identify_messages`/`parse_identify`:
+  the shipping prompt scored **24/24 on safety — it never once invented a size** — while reading
+  only ~1/6 of legible ones. A candidate prompt that told the model "reading is not inferring"
+  produced **no recall gain and a reproducible wrong answer** (`M` for the circled-`S` label, 3
+  runs out of 3). **No prompt change shipped.** Under-reading is the designed trade: a null
+  sends a human to the tag, a wrong size ships the wrong garment. Direct probing confirms the
+  model *can* read these tags when asked plainly, so the recall gap is real but must not be
+  closed by weakening the never-infer rule.
+- **`backup.ps1` had never actually run — it could not.** Line 248 wrote the dump with
+  `Set-Content -AsByteStream`, which is **PowerShell 7+ only**; the host has no `pwsh` and its
+  `powershell.exe` is **5.1**, so the script threw on its first step and left an *empty*
+  timestamped directory — a backup set that looks present until you open it. Fixed by
+  redirecting `pg_dump` through `cmd` straight to disk (binary never enters the 5.1 pipeline,
+  which would decode it to text and corrupt it; `-Encoding Byte` is no good either, being gone
+  in 7). Now verified end-to-end: `PGDMP` magic bytes, `pg_restore --list` reads 55 TOC entries,
+  17.4 MB photo archive, `-Verify` green. **Restore is still unrehearsed** — deliberately, since
+  proving it means `pg_restore --clean` against the live database.
+- **Weekly CI had been red for three straight weeks** (2026-07-27 / 08-03 / 08-10) on
+  `pip-audit`, and the job's own comment says a red weekly run is the signal to look. The sole
+  cause was `ecdsa` PYSEC-2026-1325 (Minerva timing attack), which has **no fix version** —
+  upstream considers side channels out of scope — and is present only because `python-jose`
+  declares it. Crate never reaches it: local tokens are HS256, suite tokens are decoded with
+  `algorithms=["RS256"]` pinned, so no EC signing/keygen/ECDH ever runs. Ignored explicitly with
+  that reasoning so the weekly signal means something again; the real remediation (drop
+  python-jose for PyJWT) is recorded at the ignore. `pytest` 8.4.2 is also flagged
+  (PYSEC-2026-1845, fixed in 9.0.3) but 9.x conflicts with `pytest-asyncio` 0.26.0, and CI's
+  audit installs runtime deps only — pinned with a comment rather than bumped blind.
+- **Two small defects fixed, both found by using the tools rather than reading them:**
+  `photo_smoke.py` printed a hardcoded "LM Studio is unreachable" remediation for *any* failure,
+  so an ordinary `low_confidence` draft sent you debugging container networking that was fine —
+  it now names the failing photo, prints the real `scan_error`, and matches the hint to it. And
+  `scan_pipeline.py` recorded `identify_unavailable` without logging it, so a real LM Studio
+  outage left no trace in `docker logs`; it now logs a warning.
+- **Roborazzi: verified before re-recording, and only 2 of 16 baselines were actually stale.**
+  `item_detail` was *not* stale despite being assumed so. `review_light`/`review_dark` changed
+  by ~470k pixels — the archive-first round's "Garment details" button, which appears on every
+  draft by design (a general good misclassified from a garment needs a route into the tag
+  fields). Recording rewrites all 16 files, but the other 14 differed by only 78–878 px of
+  anti-aliasing jitter, so they were restored: the commit shows the two that changed meaning.
+- **Verified:** server **271 pytest green**, `ruff check` **and** `ruff format --check` clean
+  (CI runs both); Android **28 unit tests** + all **16 Roborazzi baselines** verify green.
+  Deploy was already live before this round — the "runner + `CRATE_DIR` still human-gated" note
+  above was stale, first green Deploy having run 2026-08-14 with its post-deploy smoke passing.
+- **Still unverified, honestly:** backup *restore* (above); the on-device pass; and everything
+  eBay/Shippo, which is still keyset-gated. The photographs used here are real but they are not
+  *this wardrobe* — a run of `photo_smoke.py --dir <folder>` against the owner's own garments,
+  in the owner's lighting, on the owner's phone camera, is still worth doing and is what
+  `scripts/photo_smoke.py` was written for.

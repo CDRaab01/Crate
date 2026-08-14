@@ -95,8 +95,21 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
 - `deploy.yml` — self-hosted `crate`-labeled runner redeploys green `main` via
   `deploy/redeploy.ps1`, then runs the synthetic smoke inside the container. An opt-in
   `bootstrap_host` input creates the deployment clone and a minimal `server/.env` when
-  absent (never overwrites an existing `.env`). Human-gated setup: runner registration +
-  `CRATE_DIR` Actions variable + Tailscale Serve config.
+  absent (never overwrites an existing `.env`). Setup is **done**: the runner is registered
+  with the `crate` label, `vars.CRATE_DIR` was set 2026-07-26, Tailscale Serve is on `:8446`,
+  and the first green Deploy ran 2026-08-14 with its post-deploy smoke passing.
+- **`CRATE_DIR` is a deployment clone, not a dev checkout.** `deploy.yml` runs
+  `git -C $CRATE_DIR reset --hard <ref>` on every green `main`, and on the host that path
+  (`C:\Code\Crate`) is owned by the runner service account. Never edit or branch there —
+  uncommitted work is one deploy away from being erased. Work in a separate clone.
+- **The weekly `pip-audit` job ignores `PYSEC-2026-1325`** (`ecdsa`, Minerva timing attack on
+  P-256) with the reasoning recorded at the ignore. It has no fix version — upstream considers
+  side channels out of scope — and `ecdsa` is present only because `python-jose` declares it
+  unconditionally; Crate never reaches it (local tokens HS256, suite tokens decoded with
+  `algorithms=["RS256"]` pinned, so no EC signing/keygen/ECDH). Left un-ignored the job is red
+  forever, which is how it went unexamined from 2026-07-27 to 2026-08-13 — a permanently red
+  signal is no signal. Real remediation is replacing python-jose with PyJWT. Note the job runs
+  `pip install -e .`, so it audits **runtime deps only**; dev-only advisories never gate it.
 - **Health gate identity check.** The gate polls `127.0.0.1:8007/health` *and* asserts
   `/version` reports `name == "Crate API"`. `/health` returns an identical
   `{"status":"ok"}` in every suite app, so port alone cannot identify the responder — the
@@ -140,8 +153,16 @@ the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeli
    → LM Studio (strict-JSON prompt, fence-strip + widest-object-span salvage, condition
    normalized to the enum, weight/dims bounds-checked, title clamped to eBay's 80).
    Content failure ⇒ low-confidence empty draft (`scan_error="low_confidence"`);
-   transport failure ⇒ `scan_error="identify_unavailable: …"` — the draft always
-   survives with its photos.
+   transport failure ⇒ `scan_error="identify_unavailable: …"` (also logged as a warning —
+   an outage recorded only per-item in the DB is invisible in `docker logs`) — the draft
+   always survives with its photos.
+   **`_chat_vision` deliberately sends no `max_tokens`.** `google/gemma-4-e4b` is a
+   reasoning model: it returns `reasoning_content` alongside `content`, and its hidden
+   reasoning tokens share the completion budget while it emits nothing until reasoning
+   finishes. An answer-sized cap would therefore return `""`, which `parse_identify` reads
+   as "unidentifiable" — a silent, mocked-test-invisible failure (the suite-wide gemma-4
+   trap). Confirmed live 2026-08-14: `content` is populated, ~15 s/item, inside the 60 s
+   `lm_studio_timeout`.
    The prompt also carries an **apparel block** (item_kind, department, size, size_type,
    color, material, style, fit, sleeve_length) with one hard rule: report only what is
    legible, never infer a size from how a garment looks. Unrecognized enums are dropped to
@@ -239,6 +260,25 @@ so one luminance-derived mapping applies to all three channels. Guarded by
 `test_white_replacement_leaves_the_background_pure_white`, `test_cleanup_keeps_the_garment_hue`
 and `test_levels_still_lift_an_underexposed_capture`.
 
+**Confirmed against the live stack, 2026-08-14.** The tests above prove the pipeline on
+Pillow-built fixtures; CI can never exercise U2-Net (not downloaded) or a real vision model.
+Driving 19 licensed real photographs through the deployed server closed both gaps: rembg
+segmented 15 of 17 items to 4/4 pure-white corners with a tight crop (the two partials were a
+clothing *rack* — no single subject — and a flat label), and the levels fix held on real
+pixels, the dark-navy denim control landing at centre-mean `(72,77,87)` on pure white with
+**0.03% pure black** where the old order produced `(0,0,0)`.
+
+**Size reading: measured, and a prompt "improvement" rejected on the evidence.** Ground truth
+was read by eye off 8 real tag photographs and replayed through the shipping
+`build_identify_messages`/`parse_identify` three times. The current prompt scored **24/24 on
+safety — it never invented a size** — while transcribing only ~1/6 of legible ones. A candidate
+that added "reading is not inferring" plus a rule for marked size runs gave **no recall gain and
+a reproducible wrong answer** (`M` for a label whose `S` is circled, 3 runs of 3). It was not
+shipped. Direct probing shows the model *can* read these tags when asked plainly, so the recall
+gap is real — but it must not be closed by softening the never-infer rule, because the first
+nudge in that direction immediately started guessing the middle of a size run. Under-reading is
+the designed trade: a null sends a human to the tag; a wrong size ships the wrong garment.
+
 ## Backups (archive-first round, 2026-08-12)
 
 `docker-compose.yml` puts the DB in the `pgdata` volume and item photos in the `photos`
@@ -266,6 +306,15 @@ photographed, tagged, measured and boxed, so:
   set bad. The helper container is `postgres:16` (already pulled for the db service) so
   verification needs no registry round trip and works offline.
 - `-Verify` re-checks the newest set without writing one. Restore steps: deploy/README.md.
+- **It must stay Windows PowerShell 5.1-compatible** — that is the host's `powershell.exe`
+  and what the nightly scheduled task runs; there is no `pwsh` on the Dragonfly host. As
+  first written it used `Set-Content -AsByteStream` (PowerShell 7+ only) for the dump, so
+  under 5.1 it threw immediately and left an empty timestamped directory — present in a
+  listing, worthless on restore, exactly the "trusted empty backup" this script exists to
+  prevent. The dump is now redirected by `cmd` straight to disk: binary must never travel
+  through a 5.1 pipeline, which decodes it to text and corrupts it, and the 5.1 spelling
+  (`-Encoding Byte`) is no better since it is gone in 7. Verified 2026-08-14 against the
+  live stack (`PGDMP` header, `pg_restore --list` reads 55 TOC entries).
 
 ## Auto price-drop scheduler (Phase 8, as built — the §9 documented exception)
 

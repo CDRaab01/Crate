@@ -50,6 +50,13 @@ Each run writes `<BackupDir>\crate-YYYYMMDD-HHmmss\` containing `db.dump`,
 `powershell deploy/backup.ps1 -Verify` re-checks the newest set; use it to confirm a
 scheduled job is really producing restorable output rather than silently writing stubs.
 
+The script runs under **Windows PowerShell 5.1** — the host's `powershell.exe` and what the
+scheduled task above gets (there is no `pwsh` on the Dragonfly host). Keep it 5.1-compatible:
+it originally wrote the dump with `Set-Content -AsByteStream`, which is PowerShell 7+ only, so
+under 5.1 it threw on its first step and left an **empty** backup directory behind — a set that
+looks present in a listing until you open it. That is why `-Verify` exists; run it after any
+change here, under `powershell -NoProfile -File …` rather than an interactive 7 shell.
+
 ### Restoring from a backup
 
 Restore is not exercised by CI, so **rehearse it once against a throwaway Compose project

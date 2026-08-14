@@ -26,6 +26,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # pytest stays on 8.x deliberately. PYSEC-2026-1845 (predictable /tmp/pytest-of-{user}
+    # paths on UNIX, local privilege/DoS) is fixed in 9.0.3, but 9.x conflicts with
+    # pytest-asyncio 0.26.0, and moving pytest-asyncio changes the fixture/loop semantics
+    # this suite leans on (asyncio_mode = "auto"). Dev-only, and CI's pip-audit job installs
+    # runtime deps only (`pip install -e .`), so it never gated anything. Bump both together
+    # as a deliberate change with the full suite as the gate — not as a drive-by.
     "pytest==8.4.2",
     "pytest-asyncio==0.26.0",
     "httpx==0.28.1",

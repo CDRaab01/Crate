@@ -165,7 +165,16 @@ jobs:
           python-version: "3.12"
       - run: pip install pip-audit
       - run: pip install -e .
-      - run: pip-audit --desc
+      # PYSEC-2026-1325 (ecdsa, Minerva timing attack on P-256) is ignored deliberately.
+      # It has NO fix version — upstream python-ecdsa considers side-channel attacks out of
+      # scope and has no planned fix — and `ecdsa` is here only because python-jose declares
+      # it unconditionally. Crate never exercises it: local tokens are HS256 (config.algorithm)
+      # and suite tokens are decoded with algorithms=["RS256"] pinned, so no EC signing, key
+      # generation or ECDH ever runs. Left un-ignored this job is red forever, which is how it
+      # went unlooked-at from 2026-07-27 to 2026-08-13 — a permanently red signal is no signal.
+      # The real remediation is dropping python-jose for PyJWT (no ecdsa dependency); until
+      # then, re-check this line whenever python-jose is bumped.
+      - run: pip-audit --desc --ignore-vuln PYSEC-2026-1325
 
   android-build:
     name: "Android — Assemble Debug APK"
