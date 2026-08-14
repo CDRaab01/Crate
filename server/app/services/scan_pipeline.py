@@ -109,7 +109,12 @@ async def process_item(item_id: uuid.UUID) -> None:
             await price_item(item)
         except HTTPException as e:
             # Transport failure (LM Studio down/slow/broken): the draft survives with its
-            # photos; the review stack shows why identification is missing.
+            # photos; the review stack shows why identification is missing. Logged as well
+            # as recorded — an outage that only shows up per-item in the DB is invisible in
+            # `docker logs`, so the first sign of LM Studio being down was a user noticing.
+            logger.warning(
+                "identification unavailable for item %s: %s (%s)", item_id, e.detail, e.status_code
+            )
             item.scan_error = f"identify_unavailable: {e.detail}"
         except Exception:
             logger.exception("scan pipeline failed for item %s", item_id)

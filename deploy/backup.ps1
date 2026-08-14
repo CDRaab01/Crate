@@ -244,8 +244,14 @@ New-Item -ItemType Directory -Path $setPath -Force | Out-Null
 #    so the dump is compressed without a second tool.
 $dumpPath = Join-Path $setPath "db.dump"
 Write-Host "Dumping database '$pgDb'..."
-& docker compose --project-directory $RepoDir exec -T db pg_dump -U $pgUser -d $pgDb -Fc |
-  Set-Content -Path $dumpPath -AsByteStream
+# The dump is binary, so it never enters the PowerShell pipeline: `Set-Content -AsByteStream`
+# is PowerShell 7+ only and this host has no pwsh — the Dragonfly host's powershell.exe is
+# Windows PowerShell 5.1, which is also what a scheduled task gets. Under 5.1 the old line
+# failed outright ("A parameter cannot be found that matches parameter name 'AsByteStream'"),
+# so the backup died on its first step. Its 5.1 spelling (-Encoding Byte) is no good either:
+# it is gone in 7, and piping bytes through 5.1 decodes them to text and corrupts the dump.
+# Redirecting via cmd writes the bytes straight to disk and behaves identically on 5.1 and 7.
+& cmd.exe /c "docker compose --project-directory `"$RepoDir`" exec -T db pg_dump -U $pgUser -d $pgDb -Fc > `"$dumpPath`""
 if ($LASTEXITCODE -ne 0) {
   throw "pg_dump failed - no backup written."
 }
