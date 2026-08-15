@@ -173,7 +173,7 @@ async def process_item(item_id: uuid.UUID) -> None:
             logger.exception("scan pipeline failed for item %s", item_id)
             item.scan_error = "scan_failed"
 
-        item.processed_at = datetime.datetime.now(datetime.timezone.utc)
+        item.processed_at = datetime.datetime.now(datetime.UTC)
         await db.commit()
 
 

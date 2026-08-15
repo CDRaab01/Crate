@@ -48,9 +48,9 @@ async def poll_orders(db: AsyncSession, user_id, client: httpx.AsyncClient | Non
     active = client or httpx.AsyncClient(timeout=30.0)
     try:
         # Last 7 days is plenty for a 15-minute poller and keeps the response bounded.
-        since = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
-        ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        since = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=7)).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
         resp = await active.get(
             f"{oauth.api_host()}/sell/fulfillment/v1/order",
             params={"filter": f"creationdate:[{since}..]", "limit": "50"},
@@ -98,13 +98,13 @@ async def poll_orders(db: AsyncSession, user_id, client: httpx.AsyncClient | Non
         try:
             sale_price = Decimal(str(total))
         except (InvalidOperation, TypeError):
-            sale_price = matched.chosen_price or Decimal("0")
+            sale_price = matched.chosen_price or Decimal(0)
 
         sale = Sale(
             item_id=matched.id,
             ebay_order_id=order_id,
             sale_price=sale_price,
-            sale_date=datetime.datetime.now(datetime.timezone.utc),
+            sale_date=datetime.datetime.now(datetime.UTC),
             buyer_username=str(order.get("buyer", {}).get("username") or "unknown"),
             # Minimum payload we actually need to ship — nothing more (CLAUDE.md §9).
             buyer_address={
@@ -230,7 +230,7 @@ async def push_tracking(
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "lineItems": line_item_ids,
-                "shippedDate": datetime.datetime.now(datetime.timezone.utc).strftime(
+                "shippedDate": datetime.datetime.now(datetime.UTC).strftime(
                     "%Y-%m-%dT%H:%M:%S.000Z"
                 ),
                 "shippingCarrierCode": carrier,

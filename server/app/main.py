@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,18 +9,18 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
-from contextlib import asynccontextmanager
-
 from app.routers import (
     auth,
     ebay,
     items,
     messages,
-    settings as settings_router,
     shipping,
     suite_auth,
     templates,
     users,
+)
+from app.routers import (
+    settings as settings_router,
 )
 from app.services import poller
 

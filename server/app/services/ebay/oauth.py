@@ -33,7 +33,7 @@ _API_HOSTS = {
 }
 
 # Seller scopes: inventory (create/publish listings) + fulfillment (orders, tracking).
-USER_SCOPES = " ".join(
+USER_SCOPES = " ".join(  # noqa: FLY002 - one scope per line stays readable and diffable
     [
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
@@ -145,7 +145,7 @@ async def exchange_code(
         },
         client=client,
     )
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     expires_at = now + datetime.timedelta(seconds=int(body.get("expires_in", 7200)))
     refresh_expires_at = now + datetime.timedelta(
         seconds=int(body.get("refresh_token_expires_in", 47304000))  # ~18 months
@@ -187,7 +187,7 @@ async def user_token(db: AsyncSession, user_id, client: httpx.AsyncClient | None
             status.HTTP_409_CONFLICT, "eBay is not connected — run the one-time consent first"
         )
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     if creds.expires_at > now + datetime.timedelta(minutes=5):
         return decrypt(creds.access_token_enc)
 

@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -17,8 +18,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-import httpx
 
 from app.apparel import PHOTO_ROLES, normalize_enum
 from app.config import settings

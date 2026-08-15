@@ -125,7 +125,11 @@ async def get_rates(
     for raw in body.get("rates", []):
         try:
             amount = Decimal(str(raw["amount"]))
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
+            # One unparseable rate (missing key, non-numeric amount) must not sink the
+            # whole rate shop - the user still needs the carriers that DID quote. Not
+            # logged per-rate: a malformed entry is a Shippo-side quirk, not our bug,
+            # and a noisy log here would fire on every quote.
             continue
         rates.append(
             Rate(

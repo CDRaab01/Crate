@@ -20,11 +20,11 @@ from app.database import get_db
 from app.limiter import limiter
 from app.models.item import Item
 from app.models.sale import Sale
+from app.models.user_settings import UserSettings
 from app.schemas.item import Dims, ItemOut, SaleOut
 from app.security import CurrentUser
 from app.services import item_lifecycle, notify, shippo
 from app.services.ebay import fulfillment
-from app.models.user_settings import UserSettings
 
 logger = logging.getLogger(__name__)
 
