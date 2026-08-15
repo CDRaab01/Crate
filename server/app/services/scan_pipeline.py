@@ -60,8 +60,8 @@ async def process_item(item_id: uuid.UUID) -> None:
                 identify_candidates.append((photo.role, data_url(cleaned_bytes, "image/png")))
                 if photo.role == "tag":
                     # The label pass reads the ORIGINAL, not the cleaned copy. Measured over
-                    # three runs against eight real tag photographs: 12/18 sizes read from
-                    # originals vs 10/18 from cleaned. The margin is small, but cleanup is
+                    # three runs against eight real tag photographs: 15/18 sizes read from
+                    # originals vs 10/18 from cleaned. Cleanup is
                     # built for garments on backgrounds and behaves unpredictably on a flat
                     # label — on one shirt it decided a woven brand tab was "the subject" and
                     # cropped the rest of the garment away. For a document-like photo the

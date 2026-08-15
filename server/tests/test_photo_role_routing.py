@@ -128,7 +128,7 @@ async def test_label_pass_receives_only_the_tag_photo(auth_client, recording_pip
     assert tag_url not in recording_pipeline["identify"]
     assert len(recording_pipeline["identify"]) == 2
 
-    # The label pass reads the ORIGINAL bytes, not the cleaned copy — measured 12/18 vs
+    # The label pass reads the ORIGINAL bytes, not the cleaned copy — measured 15/18 vs
     # 10/18 sizes read, and cleanup is built for garments on backgrounds, not flat labels.
     # The stub marks cleaned output with a suffix, so this distinguishes the two.
     decoded = base64.b64decode(tag_url.split(",", 1)[1])

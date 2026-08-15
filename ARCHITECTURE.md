@@ -259,20 +259,40 @@ two negative controls** (a brand-only tab, a care-symbols-only label):
 |---|---|---|
 | identify prompt on the cleaned photo (previous behaviour) | 3/18 | 6/6 |
 | label prompt on the cleaned photo | 10/18 | 6/6 |
-| **label prompt on the original photo (shipped)** | **12/18** | **6/6** |
+| **label prompt on the original photo (shipped)** | **15/18** | **6/6** |
 
-So the narrow pass roughly triples recall and invented a size **zero times in 18 control
+So the narrow pass roughly quintuples recall and invented a size **zero times in 18 control
 observations** — the bar a previous candidate prompt failed by confidently answering "M" for a
 label whose "S" is circled. The circled-size-run rule in `LABEL_USER_PROMPT` handles that case
 correctly now, and `test_label_prompts.py` asserts the guardrail strings literally, because a
 silent edit softening them would reintroduce exactly that failure.
 
-**The pass reads the ORIGINAL, not the cleaned copy** — that is what the third arm was for. The
-margin (12 vs 10) is small enough to be noise on its own, but `clean_photo` is built for
-garments on backgrounds and behaves unpredictably on a flat label: on one shirt it decided the
-woven brand tab was "the subject" and cropped the garment away. Worth knowing the two arms fail
-on *different* photographs — one jeans label reads cleaned-only — so a cleaned-copy retry when
-the original returns nothing is a credible follow-up, unmeasured as yet.
+**Two corrections to the first published version of this table, both worth keeping as warnings.**
+
+*The shipped arm was originally recorded as 12/18 because the ground truth was wrong.* One tag
+was scored against the size in its source file's title (`大`) rather than against the label in
+the photograph, which actually reads **別大** — two characters, "extra large" in hanbok sizing.
+The model transcribed both, correctly, every time. A "strict" scorer added later then hard-coded
+the mistake by explicitly rejecting `别大` as a garbled read of `大`. **Derive ground truth by
+reading the image, never from a filename**, or a correct answer gets recorded as a failure and
+the following weeks are spent fixing something that works.
+
+*The remaining ~3/18 is not a fixed set of hard images.* Between measurement sessions results
+are near-deterministic within a session but shift between them, and **which** photograph fails
+moves — one session misses a jeans label, the next reads it and misses nothing else. So
+cross-session comparisons of a few points are meaningless here; only same-session paired
+comparisons are worth acting on.
+
+**The pass reads the ORIGINAL, not the cleaned copy.** `clean_photo` is built for garments on
+backgrounds and behaves unpredictably on a flat label — on one shirt it decided the woven brand
+tab was "the subject" and cropped the garment away.
+
+**A cleaned-copy retry when the original returns null was measured and rejected.** It does
+recover the failing image — but 2 runs in 3, with the third returning `EU 36` for a label that
+reads `EUR 30 / US 30 / CN 170/76A`. That trades a safe null for a wrong size one time in three,
+which is the exact trade the never-infer rule exists to refuse. The retry also fires precisely
+on labels that legitimately have no size (the negative controls), spending calls and adding
+hallucination risk where there is nothing to find.
 
 Honest limits: `tests/fixtures/images.py::tag_photo` carries no legible text, so CI proves
 *routing* (which pass received which photo) and never OCR accuracy. Real accuracy is measured
