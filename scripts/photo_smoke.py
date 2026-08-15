@@ -99,10 +99,29 @@ def request(method: str, url: str, *, form=None, body=None, token=None, timeout=
         fail(f"{method} {url}: {e}")
 
 
+PHOTO_ROLES = ("front", "back", "detail", "tag")
+
+
+def role_of(path: Path) -> str | None:
+    """Guess a photo's role from its filename, e.g. "navy-shirt-tag.jpg" -> "tag".
+
+    The app sends roles explicitly from its guided capture flow; this script has only
+    filenames to go on. Naming a file *tag* is how you point the label-reading pass at it
+    from here, which is what makes real-photograph tag accuracy measurable at all — CI's
+    fixtures carry no legible text.
+    """
+    stem = path.stem.lower()
+    for role in PHOTO_ROLES:
+        if role in stem:
+            return role
+    return None
+
+
 def post_photos(url: str, token: str, photos: list[Path], timeout: int):
     """multipart/form-data by hand — stdlib only, matching synthetic_smoke.py's constraint."""
     boundary = f"----crate{uuid.uuid4().hex}"
     body = bytearray()
+    roles = [role_of(p) for p in photos]
     for path in photos:
         ctype = mimetypes.guess_type(path.name)[0] or "image/jpeg"
         body += f"--{boundary}\r\n".encode()
@@ -112,6 +131,14 @@ def post_photos(url: str, token: str, photos: list[Path], timeout: int):
         body += f"Content-Type: {ctype}\r\n\r\n".encode()
         body += path.read_bytes()
         body += b"\r\n"
+    # Roles are index-aligned with photos, so it is all-or-nothing: send a value for every
+    # photo or omit the field entirely. Anything else is a 422 by design.
+    if any(roles):
+        for role in roles:
+            body += f"--{boundary}\r\n".encode()
+            body += b'Content-Disposition: form-data; name="roles"\r\n\r\n'
+            body += (role or "detail").encode()
+            body += b"\r\n"
     body += f"--{boundary}--\r\n".encode()
 
     req = urllib.request.Request(

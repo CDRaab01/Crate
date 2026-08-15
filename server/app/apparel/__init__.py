@@ -13,10 +13,12 @@ from app.apparel.attributes import (
     DEPARTMENTS,
     FITS,
     MEASUREMENT_KEYS,
+    PHOTO_ROLES,
     SIZE_TYPES,
     SLEEVE_LENGTHS,
     normalize_enum,
     normalize_measurements,
+    photo_role_rank,
 )
 from app.apparel.completeness import (
     HAND_ONLY_FIELDS,
@@ -24,6 +26,7 @@ from app.apparel.completeness import (
     attrs_from_item,
     missing_for_listing,
     missing_hand_only,
+    missing_photo_roles,
 )
 
 __all__ = [
@@ -32,11 +35,14 @@ __all__ = [
     "HAND_ONLY_FIELDS",
     "LISTING_FIELDS",
     "MEASUREMENT_KEYS",
+    "PHOTO_ROLES",
     "SIZE_TYPES",
     "SLEEVE_LENGTHS",
     "attrs_from_item",
     "missing_for_listing",
     "missing_hand_only",
+    "missing_photo_roles",
     "normalize_enum",
     "normalize_measurements",
+    "photo_role_rank",
 ]

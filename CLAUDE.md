@@ -649,3 +649,44 @@ promotes it.
   `pg_restore --clean` against prod — the artifacts are proven restorable, the procedure is not);
   exercising the ops scripts from CI; relocating `CRATE_DIR` off the dev checkout; replacing
   python-jose with PyJWT; and the tag-reading second pass. Each wants its own change.
+
+## Photo roles + label pass (2026-08-15) — PR 1 of 2, server half
+
+Crate read the size off a legible clothing tag about **1 in 6 times**. For an archive-first
+workflow that is close to useless: the tag is gone the moment the garment is boxed, so a
+feature that mostly nags instead of capturing costs an unboxing later. Details and the
+measurement table are in ARCHITECTURE.md (§"Photo roles + the label pass"); this is the summary.
+
+- **Photo roles** (`item_photos.role`, migration `0004`, `front|back|detail|tag`, nullable).
+  Sent as a `roles` form field index-aligned with `photos`; absent = unknown, which keeps every
+  existing caller — the Android app, `photo_smoke.py`, the deploy smoke — working untouched.
+  Unknown role ⇒ **422**, deliberately unlike vision output: a role is a value our client chose.
+- **A narrow label pass** rather than a louder omnibus prompt. The previous round measured that
+  pushing the identify prompt to try harder gave *no recall gain and a reproducible wrong
+  answer*, so the never-infer rule is carried over verbatim and the new prompt does exactly one
+  job: transcribe what is printed. Measured 3 arms × 3 runs on 8 real tags: **3/18 → 12/18
+  sizes read, with zero invented sizes across all 18 negative-control observations.** The
+  circled-size-run case that broke the old candidate now reads correctly.
+- **It reads the ORIGINAL photo, not the cleaned one** — the third arm existed to test my own
+  assumption, and it was wrong twice over. I first assumed cleanup was mangling tags; it isn't
+  (one label reads *better* cleaned, like a document scan). But measured across all eight,
+  originals still won 12/18 to 10/18, and cleanup is unpredictable on labels — it once decided
+  a woven brand tab was "the subject" and cropped the shirt away.
+- **Two traps designed around, both found by reading rather than hitting them.** The pass runs
+  **before `signature_for_item`** (the clothing signature needs brand AND size, so a late size
+  would silently kill the duplicate fast-path), and it has **its own `except`** (a label-call
+  503 reaching the outer handler would rewrite a good identification as `identify_unavailable`
+  and skip template matching and pricing). A failed label read logs and sets no `scan_error`.
+- **The eBay hero image**, which nearly shipped as a footnote and would have been a real bug:
+  listing photos went up in shoot order, so guided capture — which *encourages* a tag shot —
+  could have put a care label on the face of a listing. Now sorted front→back→detail→unknown→tag,
+  tag included but last, `ItemPhoto.order` never rewritten.
+- **Verified:** **340 pytest green** (271 + 69 new), ruff check + format clean; migration `0004`
+  applies **and** downgrades on a fresh DB; the deploy smoke still passes **sending no roles**;
+  and end-to-end against the live model on an isolated build, a real garment+tag pair came back
+  with `size = X-LARGE` read off the tag and `size` dropped from the hand-only gap list.
+- **Next (PR 2):** the Android guided capture flow. Pulse already has the shape
+  (`OnboardingScaffold`, `PulsePageIndicator`, `OnboardingPage`) so no Pulse change is needed;
+  the hazards are the Room version bump silently wiping queued captures and orphaning their
+  files, and `ImageBytes`' Q85 encode, which is a bigger legibility risk for fine label text
+  than the 1600px cap is.

@@ -14,6 +14,11 @@ from app.services.ai.identify_prompts import (
     build_identify_messages,
     parse_identify,
 )
+from app.services.ai.label_prompts import (
+    LabelDraft,
+    build_label_messages,
+    parse_label,
+)
 
 
 def data_url(image_bytes: bytes, content_type: str) -> str:
@@ -86,3 +91,20 @@ async def identify_item(
     if draft is None:
         return IdentifyDraft(confidence="low")
     return draft
+
+
+async def read_label(
+    image_data_urls: list[str],
+    client: httpx.AsyncClient | None = None,
+) -> LabelDraft | None:
+    """Read size/size_type/material off a care-label photo, or None if nothing was legible.
+
+    Lives here rather than beside its prompt because `_chat_vision` is module-private and
+    reaching across modules for a `_`-prefixed name would be a new precedent; keeping it in
+    this file means the transport, timeout and 503/504/502 mapping have exactly one
+    implementation. Transport failures raise like identify_item's — the caller decides
+    whether that is fatal, and in the scan pipeline it deliberately is not.
+    """
+    messages = build_label_messages(image_data_urls)
+    raw_text = await _chat_vision(messages, client)
+    return parse_label(raw_text)

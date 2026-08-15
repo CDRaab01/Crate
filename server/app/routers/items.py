@@ -7,6 +7,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    Form,
     HTTPException,
     Request,
     UploadFile,
@@ -19,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 import httpx
 
+from app.apparel import PHOTO_ROLES, normalize_enum
 from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
@@ -80,13 +82,40 @@ async def scan(
     db: Annotated[AsyncSession, Depends(get_db)],
     background: BackgroundTasks,
     photos: list[UploadFile],
+    roles: Annotated[list[str] | None, Form()] = None,
 ):
     """Batch-capture entry point: 1-8 photos of ONE item → a draft that processes in the
-    background (cleanup → identify). Poll GET /items/{id} until processed_at is set."""
+    background (cleanup → identify). Poll GET /items/{id} until processed_at is set.
+
+    `roles` is optional and index-aligned with `photos` (front/back/detail/tag), set by the
+    guided capture flow. Photo order is already purely positional here, so a parallel list
+    is the consistent way to carry it. Omitting it entirely is valid and means "unknown" —
+    which keeps every pre-guided-capture client working, including the deploy smoke.
+    """
     if not 1 <= len(photos) <= MAX_SCAN_PHOTOS:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"Send 1-{MAX_SCAN_PHOTOS} photos"
         )
+    # Index pairing is the only sane contract for parallel lists: zipping a short list would
+    # silently attach roles to the wrong photos, and a mislabelled tag is worse than none.
+    if roles and len(roles) != len(photos):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Send one role per photo or none at all ({len(roles)} roles, {len(photos)} photos)",
+        )
+    # Reject, don't degrade. Vision output is salvaged because the model is doing its best
+    # with a photograph; a role is a value OUR client chose, so an unrecognised one is a
+    # contract bug worth surfacing loudly rather than silently storing as unknown.
+    normalized_roles: list[str | None] = [None] * len(photos)
+    for index, raw in enumerate(roles or []):
+        role = normalize_enum(raw, PHOTO_ROLES)
+        if role is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Unknown photo role {raw!r} (expected one of {', '.join(PHOTO_ROLES)})",
+            )
+        normalized_roles[index] = role
+
     payloads: list[tuple[bytes, str]] = []
     for upload in photos:
         if upload.content_type not in photo_store.ALLOWED_CONTENT_TYPES:
@@ -107,7 +136,14 @@ async def scan(
     await db.flush()
     for order, (data, content_type) in enumerate(payloads):
         path = photo_store.save_original(item.id, order, data, content_type)
-        db.add(ItemPhoto(item_id=item.id, order=order, original_path=path))
+        db.add(
+            ItemPhoto(
+                item_id=item.id,
+                order=order,
+                role=normalized_roles[order],
+                original_path=path,
+            )
+        )
     await db.commit()
 
     background.add_task(scan_pipeline.process_item, item.id)

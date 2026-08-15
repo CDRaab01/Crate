@@ -7,12 +7,12 @@ responses. Content failures degrade to a low-confidence draft; they never raise.
 """
 
 import json
-import re
 
 from pydantic import BaseModel
 
 from app.apparel import DEPARTMENTS, FITS, SIZE_TYPES, SLEEVE_LENGTHS, normalize_enum
 from app.models.item import ITEM_CONDITIONS, ITEM_KINDS
+from app.services.ai.json_salvage import clean_str, strip_fences, widest_object_span
 
 MAX_TITLE = 80  # eBay's title cap
 MAX_DESCRIPTION = 4000
@@ -107,21 +107,6 @@ def build_identify_messages(image_data_urls: list[str]) -> list[dict]:
     ]
 
 
-_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
-
-
-def _strip_fences(text: str) -> str:
-    return _FENCE_RE.sub("", text).strip()
-
-
-def _widest_object_span(text: str) -> str | None:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        return None
-    return text[start : end + 1]
-
-
 def _coerce_number(v) -> float | None:
     if v is None:
         return None
@@ -144,18 +129,11 @@ def _coerce_dims(v) -> dict | None:
     return dims
 
 
-def _clean_str(v, limit: int) -> str | None:
-    if v is None:
-        return None
-    s = str(v).strip()
-    return s[:limit] if s else None
-
-
 def parse_identify(raw_text: str) -> IdentifyDraft | None:
     """Best-effort parse of the model's response. Returns None (never raises) when nothing
     usable can be salvaged — the caller turns that into a low-confidence empty draft."""
-    stripped = _strip_fences(raw_text)
-    candidates = [stripped, _widest_object_span(stripped)]
+    stripped = strip_fences(raw_text)
+    candidates = [stripped, widest_object_span(stripped)]
     data = None
     for candidate in candidates:
         if not candidate:
@@ -170,13 +148,13 @@ def parse_identify(raw_text: str) -> IdentifyDraft | None:
     if not isinstance(data, dict) or not data:
         return None
 
-    condition = _clean_str(data.get("condition"), 16)
+    condition = clean_str(data.get("condition"), 16)
     if condition is not None:
         condition = condition.lower().replace(" ", "_").replace("-", "_")
         if condition not in ITEM_CONDITIONS:
             condition = None
 
-    confidence = _clean_str(data.get("confidence"), 8)
+    confidence = clean_str(data.get("confidence"), 8)
     confidence = confidence.lower() if confidence else "low"
     if confidence not in ("high", "medium", "low"):
         confidence = "low"
@@ -185,8 +163,8 @@ def parse_identify(raw_text: str) -> IdentifyDraft | None:
     if weight is not None and not (0 < weight <= 2400):  # 150 lb parcel ceiling
         weight = None
 
-    title = _clean_str(data.get("title"), MAX_TITLE)
-    description = _clean_str(data.get("description"), MAX_DESCRIPTION)
+    title = clean_str(data.get("title"), MAX_TITLE)
+    description = clean_str(data.get("description"), MAX_DESCRIPTION)
     if title is None and description is None:
         return None
 
@@ -197,21 +175,21 @@ def parse_identify(raw_text: str) -> IdentifyDraft | None:
 
     return IdentifyDraft(
         title=title,
-        brand=_clean_str(data.get("brand"), 64),
-        model=_clean_str(data.get("model"), 64),
-        category_hint=_clean_str(data.get("category_hint"), 64),
+        brand=clean_str(data.get("brand"), 64),
+        model=clean_str(data.get("model"), 64),
+        category_hint=clean_str(data.get("category_hint"), 64),
         condition=condition,
-        condition_notes=_clean_str(data.get("condition_notes"), 500),
+        condition_notes=clean_str(data.get("condition_notes"), 500),
         description=description,
         weight_oz=weight,
         dims_in=_coerce_dims(data.get("dims_in")),
         item_kind=item_kind,
         department=normalize_enum(data.get("department"), DEPARTMENTS),
-        size=_clean_str(data.get("size"), 32),
+        size=clean_str(data.get("size"), 32),
         size_type=normalize_enum(data.get("size_type"), SIZE_TYPES),
-        color=_clean_str(data.get("color"), 48),
-        material=_clean_str(data.get("material"), 96),
-        style=_clean_str(data.get("style"), 64),
+        color=clean_str(data.get("color"), 48),
+        material=clean_str(data.get("material"), 96),
+        style=clean_str(data.get("style"), 64),
         fit=normalize_enum(data.get("fit"), FITS),
         sleeve_length=normalize_enum(data.get("sleeve_length"), SLEEVE_LENGTHS),
         confidence=confidence,

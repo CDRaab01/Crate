@@ -12,6 +12,7 @@ from app.apparel import (
     attrs_from_item,
     missing_for_listing,
     missing_hand_only,
+    missing_photo_roles,
     normalize_enum,
     normalize_measurements,
 )
@@ -44,6 +45,9 @@ class ItemPhotoOut(BaseModel):
 
     id: uuid.UUID
     order: int
+    # What this photo is of, when guided capture said so. None for anything captured before
+    # roles existed — the client should badge that as unknown, not assume "front".
+    role: str | None = None
     cleaned: bool
     ebay_url: str | None
 
@@ -98,6 +102,13 @@ class ItemOut(BaseModel):
     def missing_hand_only(self) -> list[str]:
         """The urgent subset: gaps needing the physical garment back in hand."""
         return missing_hand_only(attrs_from_item(self))
+
+    @computed_field
+    @property
+    def missing_photo_roles(self) -> list[str]:
+        """Photo roles a garment still needs — separate from the field gaps above because
+        the remedy is a camera, not a text field. The client renders it in the same row."""
+        return missing_photo_roles([p.role for p in self.photos], self.item_kind)
 
 
 class ItemUpdate(BaseModel):

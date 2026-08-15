@@ -16,6 +16,7 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.apparel import photo_role_rank
 from app.config import settings
 from app.models.item import Item
 from app.services import photo_store
@@ -88,7 +89,15 @@ async def upload_photos_to_eps(item: Item, token: str, client: httpx.AsyncClient
     """Push each photo binary to eBay Picture Services; returns EPS URLs (stored on the
     photo rows so a re-post never re-uploads)."""
     urls: list[str] = []
-    for photo in item.photos:
+    # eBay uses the FIRST url as the listing's gallery image, and item.photos is ordered by
+    # ItemPhoto.order — i.e. shoot order. Before roles existed that meant a tag-first shoot
+    # put a care label on the face of the listing. Sort by role instead: front, back,
+    # detail, unknown, tag. Python's sort is stable, so shoot order still breaks ties and an
+    # item whose photos all predate roles comes out in exactly its original order.
+    #
+    # Presentation only — this must never be written back to ItemPhoto.order, because
+    # photo_store derives the on-disk filenames from it.
+    for photo in sorted(item.photos, key=lambda p: photo_role_rank(p.role)):
         if photo.ebay_url:
             urls.append(photo.ebay_url)
             continue

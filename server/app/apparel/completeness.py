@@ -14,7 +14,7 @@ Pure by design (CLAUDE.md §9: "clients display, never compute") — takes a pla
 it is table-testable without a DB, with `attrs_from_item` as the ORM adapter.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 # eBay's clothing categories want these as item specifics. Order is display order.
 LISTING_FIELDS = (
@@ -88,3 +88,22 @@ def missing_hand_only(attrs: Mapping[str, object]) -> list[str]:
     if attrs.get("item_kind") != "clothing":
         return []
     return [field for field in HAND_ONLY_FIELDS if _blank(attrs.get(field))]
+
+
+def missing_photo_roles(roles: Iterable[str | None], item_kind: object) -> list[str]:
+    """Photo roles a garment ought to have but doesn't — currently just "tag".
+
+    Deliberately NOT folded into `missing_hand_only`, for two reasons. Every entry in the
+    two lists above names an `Item` column the client can PATCH, and the review UI renders
+    them as fields to type into; a missing photo has no PATCH target and its remedy is to
+    go and take one. And `missing_hand_only` is documented as a subset of
+    `missing_for_listing`, which iterates LISTING_FIELDS — a photo token would break that.
+    The client can still render both lists in one row, which is what the user sees.
+
+    Only "tag" is reported. Front/back/detail are nice-to-have listing photos and the item
+    is perfectly usable without them, but the tag is the one that stops being recoverable
+    the moment the garment goes in a bin — the same reasoning as HAND_ONLY_FIELDS.
+    """
+    if item_kind != "clothing":
+        return []
+    return [] if "tag" in set(roles) else ["tag_photo"]
