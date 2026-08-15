@@ -153,7 +153,14 @@ function Test-BackupSet {
     }
   } else {
     $photoBytes = (Get-Item $photosPath).Length
-    if ($photoBytes -lt $MinPhotosBytes) {
+    # The byte floor catches a truncated or failed archive. It must NOT fire on an archive
+    # that is legitimately tiny because there are no photos yet: an empty gzipped tar is
+    # ~45 bytes, under the 100-byte floor, so a brand-new (or freshly emptied) Crate failed
+    # its backup every single run until the first item was scanned. A nightly false alarm is
+    # the fastest way to train someone to ignore a real one. Zero is only trusted when the
+    # row count is KNOWN to be zero; -1 means the count query failed, so the floor still
+    # applies and the entry-count cross-check below still has to agree.
+    if ($ExpectedPhotoRows -ne 0 -and $photoBytes -lt $MinPhotosBytes) {
       $problems += "photos.tar.gz is only $photoBytes bytes - the archive did not complete"
     } else {
       # Count entries from inside a container: Windows has no tar that reads gzip reliably

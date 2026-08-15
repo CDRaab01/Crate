@@ -1,0 +1,78 @@
+# Page the phone when a workflow fails.
+#
+# Until this existed, a red run was only visible to someone who went and looked at the Actions
+# tab. That is how the weekly pip-audit job sat red from 2026-07-27 to 2026-08-13 — not ignored,
+# just never announced. No other repo in the suite has a notification step of any kind; this is
+# the first, and the other six can copy it.
+#
+# Why a separate workflow instead of an `if: failure()` step inside ci.yml: the suite's ntfy is
+# self-hosted and tailnet-only (C:\ntfy, host port 8095), so a GitHub-hosted ubuntu runner cannot
+# reach it — the page has to run on the self-hosted runner. But ci.yml has a `pull_request`
+# trigger, and a self-hosted job reachable from `pull_request` would let a fork PR execute on the
+# prod host (suite invariant 7). `workflow_run` is the safe trigger, the same one deploy.yml uses.
+#
+# Triggers are workflow_run ONLY — never push, never pull_request. "Notify" is deliberately absent
+# from its own `workflows:` list so a failed page cannot retrigger itself, and deploy.yml listens
+# on `workflows: ["CI"]` only, so nothing here can chain into a deploy.
+name: Notify
+
+on:
+  workflow_run:
+    workflows: ["CI", "Deploy", "Release"]
+    types: [completed]
+
+jobs:
+  page:
+    name: "Page crate-alerts"
+    # Two guards. The conclusion check is the point of the job. The head_repository check keeps
+    # fork PRs out: workflow_run fires for a fork's CI run too, with base-repo privileges, and
+    # this job runs on the prod host — so a fork must not be able to page (or reach) it. It also
+    # keeps someone else's broken PR from waking the owner at 3am.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, crate]
+    timeout-minutes: 5
+    steps:
+      # No actions/checkout: this job needs nothing from the repo, and not checking out keeps it
+      # away from CRATE_DIR entirely.
+      - name: Publish to ntfy
+        shell: powershell
+        # Every value comes through env, never inlined as ${{ }} into the script body.
+        # workflow_run metadata (branch name especially) is attacker-controllable from a fork,
+        # and inlining it here would be shell injection on the production host.
+        env:
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_EVENT: ${{ github.event.workflow_run.event }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+          WF_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sha = if ($env:WF_SHA) { $env:WF_SHA.Substring(0, 7) } else { "unknown" }
+          $body = @(
+            "Workflow: $($env:WF_NAME)"
+            "Branch:   $($env:WF_BRANCH)  ($sha, $($env:WF_EVENT))"
+            ""
+            "$($env:WF_URL)"
+          ) -join "`n"
+
+          Write-Host $body
+
+          # Same shape as C:\Scripts\Test-SuiteInvariants.ps1, the one existing in-suite ntfy
+          # caller. localhost works because this runner IS the host running ntfy.
+          try {
+            Invoke-RestMethod -Uri "http://localhost:8095/crate-alerts" -Method Post -Body $body `
+              -Headers @{
+                Title    = "Crate $($env:WF_NAME) FAILED"
+                Priority = "high"
+                Tags     = "warning"
+                Click    = $env:WF_URL
+              } | Out-Null
+            Write-Host "(paged crate-alerts)"
+          } catch {
+            # Deliberately fatal. A page that silently fails to send recreates exactly the blind
+            # spot this workflow exists to close; a red "Notify" run is at least visible in the
+            # Actions tab, and it cannot loop because Notify does not watch itself.
+            throw "failed to publish to ntfy: $($_.Exception.Message)"
+          }

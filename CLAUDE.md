@@ -587,3 +587,65 @@ Photos stayed in a scratchpad — no binaries in git, per the fixtures design.
   *this wardrobe* — a run of `photo_smoke.py --dir <folder>` against the owner's own garments,
   in the owner's lighting, on the owner's phone camera, is still worth doing and is what
   `scripts/photo_smoke.py` was written for.
+
+## Silent-failure round (2026-08-14) — backups, alerting, and a smoke that means something
+
+The verification round proved the pipeline works. This one closes the three ways Crate could
+fail **without telling anyone** — each found by checking the host rather than reading the docs.
+Spans repo *and* host: the scheduling/encryption half lives in `C:\Scripts` (see OPERATIONS.md
+§9), because the host convention is that repo scripts produce a verified set and `C:\Scripts`
+promotes it.
+
+- **The wardrobe photos had no backup at all.** The nightly `Dragonfly DB Backup` covers Crate's
+  database (added 2026-08-05, landing daily) but is pg_dump-only and has never touched a Docker
+  volume. `/data/photos` was covered solely by `deploy/backup.ps1`, which had **no scheduled
+  task** and, until the previous round, could not run. For a wardrobe archive the photographs
+  *are* the artifact; the rows are paths pointing at them. Now: `C:\Scripts\Backup-CrateArchive.ps1`
+  (task "Crate Archive Backup", daily 04:30, offset from the 03:30 DB job) → gpg AES-256 → NAS,
+  30-day prune. **Verified by decrypting what landed**, not by watching it upload: `PGDMP`
+  header, `pg_restore --list` reads 55 TOC entries, the photo tar lists 52 entries.
+- **Nothing reported a red run.** No `if: failure()`, no ntfy, no notification of any kind in any
+  workflow in *any* suite repo — which is why `pip-audit` sat red for three weeks. `notify.yml`
+  is the first, and the other six repos can copy it. It must run on the self-hosted runner (the
+  suite ntfy is tailnet-only on `:8095`), which is exactly why it cannot be an `if: failure()`
+  step inside `ci.yml` — `ci.yml` has a `pull_request` trigger and invariant 7 forbids a
+  self-hosted job being reachable from one. All `workflow_run` metadata is passed via `env:`,
+  never interpolated into the shell: it fires for fork PRs with base-repo privileges, and a
+  branch name is attacker-controlled text on the prod host.
+- **`NTFY_TOPIC` was unsettable, not merely unset.** Compose interpolated `${NTFY_TOPIC:-}` from
+  a root `.env` that this repo does not have, so it resolved to empty every time and *every*
+  notification (sale detection, price drops, floor-reached, token expiry) was silently off —
+  the same class as the §2 compose-env rule's own cautionary tale. Now literals, pointed at the
+  self-hosted ntfy rather than public ntfy.sh: topic `crate-alerts`, per the suite's
+  `<domain>-alerts` convention, for an app that deliberately stays off the public internet.
+- **The post-deploy smoke proved the wrong thing.** It stopped at `/users/me`, so auth working
+  read as Crate working. It now pushes a generated PNG through `/items/scan` and asserts the
+  draft processed, the photo came back `cleaned`, and the bytes are servable — then always
+  deletes the draft. Strict on `identify_unavailable` (fails the deploy), lenient on
+  `low_confidence` (a synthetic rectangle is legitimately unidentifiable). **All four branches
+  were exercised live** against an isolated throwaway container: healthy → pass; dead
+  `LM_STUDIO_BASE_URL` → fail (503); wrong `LM_STUDIO_VISION_MODEL` → fail (502, which means it
+  catches the model pin too, not just the URL); and a stubbed LM Studio forcing `low_confidence`
+  → pass. Deploy grows ~45 s. The test image is hand-built from `zlib`+`struct` because the
+  smoke runs inside the container, whose image has Pillow but not `server/tests/`.
+- **The freshness alarm that had been open since the two-week silent outage** (OPERATIONS.md §8)
+  is now in the weekly `Test-SuiteInvariants.ps1`, which already pages `dragonfly-alerts`. It
+  asserts the newest **artifact's age** (36 h), never the task's configuration — the whole lesson
+  of 2026-07-27 → 08-10, when `Get-ScheduledTask` cheerfully reported `Ready` throughout. All
+  four branches tested: stale → FAIL, 0-byte → FAIL, missing → FAIL, fresh → PASS. The 0-byte
+  case is precisely what the `-AsByteStream` bug produced.
+- **Two bugs found by *using* the tools rather than reading them.** `backup.ps1` failed on an
+  empty photo archive: `$MinPhotosBytes` (100) is meant to catch a truncated tar, but an empty
+  gzipped tar is ~45 bytes, so a Crate with no items yet would have failed its backup every
+  single night until the first scan — a nightly false alarm, the fastest way to train someone
+  to ignore a real one. The floor now yields when the row count is *known* zero. And
+  `decode_body` in both smoke scripts stringified JSON **arrays** into a 200-char `repr`, making
+  list endpoints unreadable; `GET /items` now returns intact under `_list` (which is how the 17
+  leftover drafts were enumerated and cleared).
+- **Verified:** server **271 pytest green**, `ruff check` **and** `ruff format --check` clean;
+  `docker compose config` resolves the ntfy literals as intended. The live DB is back to **zero
+  items** — the correct starting state before real archiving.
+- **Still not done, deliberately:** backup **restore** into a live database (proving it means
+  `pg_restore --clean` against prod — the artifacts are proven restorable, the procedure is not);
+  exercising the ops scripts from CI; relocating `CRATE_DIR` off the dev checkout; replacing
+  python-jose with PyJWT; and the tag-reading second pass. Each wants its own change.

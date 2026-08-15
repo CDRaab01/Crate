@@ -69,7 +69,13 @@ def decode_body(raw: bytes) -> dict:
         parsed = json.loads(text)
     except ValueError:
         return {"_raw": " ".join(text.split())[:200]}
-    return parsed if isinstance(parsed, dict) else {"_raw": str(parsed)[:200]}
+    if isinstance(parsed, dict):
+        return parsed
+    # GET /items returns a JSON array. Stringifying it into "_raw" (repr, truncated at 200
+    # chars) made list endpoints unreadable rather than merely awkward; hand it back intact.
+    if isinstance(parsed, list):
+        return {"_list": parsed}
+    return {"_raw": str(parsed)[:200]}
 
 
 def request(method: str, url: str, *, form=None, body=None, token=None, timeout=30):

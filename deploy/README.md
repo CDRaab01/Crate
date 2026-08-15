@@ -50,6 +50,15 @@ Each run writes `<BackupDir>\crate-YYYYMMDD-HHmmss\` containing `db.dump`,
 `powershell deploy/backup.ps1 -Verify` re-checks the newest set; use it to confirm a
 scheduled job is really producing restorable output rather than silently writing stubs.
 
+**On the Dragonfly host this is already scheduled — don't set up a second one.**
+`C:\Scripts\Backup-CrateArchive.ps1` (task "Crate Archive Backup", daily 04:30) calls this
+script into a temp staging dir, gpg-encrypts `db.dump` and `photos.tar.gz`, and promotes them
+to `\\Diskstation\Media2\Backups\Crate\` with a 30-day prune; `MANIFEST.json` goes up in clear
+so `Test-SuiteInvariants.ps1` can check a set's age without the passphrase. The `schtasks`
+recipe above is for a *different* host, or as a reference. Note the nightly `Dragonfly DB
+Backup` already covers Crate's database — it is pg_dump-only and never touches a Docker volume,
+so the photos are what this adds.
+
 The script runs under **Windows PowerShell 5.1** — the host's `powershell.exe` and what the
 scheduled task above gets (there is no `pwsh` on the Dragonfly host). Keep it 5.1-compatible:
 it originally wrote the dump with `Set-Content -AsByteStream`, which is PowerShell 7+ only, so
