@@ -664,13 +664,14 @@ measurement table are in ARCHITECTURE.md (§"Photo roles + the label pass"); thi
 - **A narrow label pass** rather than a louder omnibus prompt. The previous round measured that
   pushing the identify prompt to try harder gave *no recall gain and a reproducible wrong
   answer*, so the never-infer rule is carried over verbatim and the new prompt does exactly one
-  job: transcribe what is printed. Measured 3 arms × 3 runs on 8 real tags: **3/18 → 12/18
+  job: transcribe what is printed. Measured 3 arms × 3 runs on 8 real tags: **3/18 → 15/18
   sizes read, with zero invented sizes across all 18 negative-control observations.** The
   circled-size-run case that broke the old candidate now reads correctly.
+  *(Published first as 12/18 — see the correction below.)*
 - **It reads the ORIGINAL photo, not the cleaned one** — the third arm existed to test my own
   assumption, and it was wrong twice over. I first assumed cleanup was mangling tags; it isn't
   (one label reads *better* cleaned, like a document scan). But measured across all eight,
-  originals still won 12/18 to 10/18, and cleanup is unpredictable on labels — it once decided
+  originals still won 15/18 to 10/18, and cleanup is unpredictable on labels — it once decided
   a woven brand tab was "the subject" and cropped the shirt away.
 - **Two traps designed around, both found by reading rather than hitting them.** The pass runs
   **before `signature_for_item`** (the clothing signature needs brand AND size, so a late size
@@ -685,6 +686,24 @@ measurement table are in ARCHITECTURE.md (§"Photo roles + the label pass"); thi
   applies **and** downgrades on a fresh DB; the deploy smoke still passes **sending no roles**;
   and end-to-end against the live model on an isolated build, a real garment+tag pair came back
   with `size = X-LARGE` read off the tag and `size` dropped from the hand-only gap list.
+- **Correction (2026-08-15), two lessons worth more than the number.** The table above first
+  published the shipped arm as **12/18**; it is **15/18**. The gap was my ground truth, not the
+  model: one tag was scored against the size in its source file's *title* (`大`) instead of the
+  label in the photograph, which reads **別大** — two characters, "extra large" in hanbok sizing.
+  The model transcribed both, correctly, on every single run. A "strict" scorer written later
+  then cemented the error by explicitly rejecting `别大` as a garbled read of `大`, turning a
+  correct answer into a recorded failure and sending me looking for fixes to something that
+  worked. **Derive ground truth by reading the image, never from a filename.**
+  Second: results are near-deterministic *within* a measurement session but shift *between*
+  them, and which photograph fails moves session to session. A cross-session comparison told me
+  a larger local model scored 15/18 against the shipped model's 12/18 — then the shipped model
+  re-measured at 15/18 on its own. **Only same-session paired comparisons mean anything here**,
+  and three runs cannot distinguish 12 from 15.
+  Also measured and rejected: retrying the cleaned copy when the original returns null. It does
+  recover the failing image, but 2 runs in 3 — the third answered `EU 36` for a label reading
+  `EUR 30 / US 30 / CN 170/76A`. Trading a safe null for a wrong size one time in three is the
+  precise trade the never-infer rule refuses, and the retry fires hardest on labels that
+  legitimately have no size at all.
 - **Next (PR 2):** the Android guided capture flow. Pulse already has the shape
   (`OnboardingScaffold`, `PulsePageIndicator`, `OnboardingPage`) so no Pulse change is needed;
   the hazards are the Room version bump silently wiping queued captures and orphaning their
