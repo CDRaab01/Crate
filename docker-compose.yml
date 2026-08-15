@@ -49,9 +49,20 @@ services:
       SUITE_JWKS_URL: https://id.dragonflymedia.org/.well-known/jwks.json
       SUITE_ISSUER: https://id.dragonflymedia.org
       # ntfy (non-secret → pinned here, not env_file): sale events, buyer messages, price
-      # drops. Empty = notifications silently off.
-      NTFY_BASE_URL: ${NTFY_BASE_URL:-https://ntfy.sh}
-      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      # drops, floor-reached prompts, eBay token-expiry warnings. Empty topic = all of it
+      # silently off, which is what shipped: `${NTFY_TOPIC:-}` interpolates from a ROOT .env
+      # and this repo has none, so the topic could never be anything but empty no matter what
+      # was set. Literals here, per the §2 compose-env rule — the same class of silent config
+      # loss that rule exists to prevent.
+      #
+      # The suite runs its own ntfy (C:\ntfy, host port 8095, tailnet-only) and the 2026-07-12
+      # decision is that suite push uses it rather than ntfy.sh. That matters more here than
+      # elsewhere: ntfy.sh topics are effectively public URLs, and these messages carry sale
+      # amounts and buyer-related detail for an app deliberately kept off the public internet.
+      # host.docker.internal is the host from inside this container, same hop as LM Studio.
+      # Topic follows the suite's <domain>-alerts convention (dragonfly-/hawksnest-/magpie-).
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://host.docker.internal:8095}
+      NTFY_TOPIC: ${NTFY_TOPIC:-crate-alerts}
       # LM Studio vision (item identification + condition + weight/dims). Non-secret and
       # required ⇒ pinned here. The config default is http://localhost:1234/v1, which is
       # correct only for bare-metal local dev: inside this container localhost is the

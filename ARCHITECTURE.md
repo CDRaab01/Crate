@@ -110,6 +110,21 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
   forever, which is how it went unexamined from 2026-07-27 to 2026-08-13 — a permanently red
   signal is no signal. Real remediation is replacing python-jose with PyJWT. Note the job runs
   `pip install -e .`, so it audits **runtime deps only**; dev-only advisories never gate it.
+- `notify.yml` — **the first failure notification in any suite repo.** `workflow_run` on
+  CI/Deploy/Release completing; when the conclusion is `failure` it pages ntfy `crate-alerts`
+  with the run URL. Until it existed a red run was visible only to someone who went and looked,
+  which is how the weekly `pip-audit` job stayed red from 2026-07-27 to 2026-08-13. Two design
+  constraints worth keeping: (a) it must run on the **self-hosted** runner, because the suite's
+  ntfy is tailnet-only on `:8095` and a GitHub-hosted runner cannot reach it — which is also why
+  it is a separate workflow rather than an `if: failure()` step in `ci.yml`, since `ci.yml` has a
+  `pull_request` trigger and invariant 7 forbids a self-hosted job being reachable from one;
+  (b) every `github.event.workflow_run.*` value is passed through `env:` and never interpolated
+  into the shell body — `workflow_run` fires for fork PRs too, with base-repo privileges, and a
+  branch name is attacker-controlled text. The job is additionally gated on
+  `head_repository.full_name == github.repository` so a fork cannot page (or reach) the prod host.
+  A failed page is deliberately fatal: a notification that silently fails to send rebuilds the
+  exact blind spot it was added to close. It cannot loop — "Notify" is absent from its own
+  `workflows:` list, and `deploy.yml` watches `["CI"]` only.
 - **Health gate identity check.** The gate polls `127.0.0.1:8007/health` *and* asserts
   `/version` reports `name == "Crate API"`. `/health` returns an identical
   `{"status":"ok"}` in every suite app, so port alone cannot identify the responder — the
@@ -163,6 +178,17 @@ the review stack polls `GET /items/{id}` until `processed_at` is set. The pipeli
    as "unidentifiable" — a silent, mocked-test-invisible failure (the suite-wide gemma-4
    trap). Confirmed live 2026-08-14: `content` is populated, ~15 s/item, inside the 60 s
    `lm_studio_timeout`.
+   **The post-deploy smoke now runs this whole path.** `scripts/synthetic_smoke.py` used to stop
+   at `/users/me`, so auth working was mistaken for Crate working and a deploy that broke rembg,
+   cleanup or the LM Studio wiring shipped green. It now posts a generated PNG to `/items/scan`,
+   polls for `processed_at`, asserts the photo came back `cleaned` and is servable, and always
+   deletes the draft. It is strict about `identify_unavailable` (fails the deploy) and lenient
+   about `low_confidence` (passes — a synthetic rectangle is legitimately unidentifiable, and
+   that is a content outcome, not a config regression). The strictness is the point: a wrong
+   `LM_STUDIO_BASE_URL` **or** `LM_STUDIO_VISION_MODEL` is the compose-env regression class that
+   has bitten this suite twice, and both were confirmed to trip it. The test image is built from
+   `zlib`+`struct` rather than Pillow because the smoke also runs inside the server container,
+   whose image copies only `app/` and `alembic/` — `server/tests/` is not there.
    The prompt also carries an **apparel block** (item_kind, department, size, size_type,
    color, material, style, fit, sleeve_length) with one hard rule: report only what is
    legible, never infer a size from how a garment looks. Unrecognized enums are dropped to
@@ -315,6 +341,22 @@ photographed, tagged, measured and boxed, so:
   through a 5.1 pipeline, which decodes it to text and corrupts it, and the 5.1 spelling
   (`-Encoding Byte`) is no better since it is gone in 7. Verified 2026-08-14 against the
   live stack (`PGDMP` header, `pg_restore --list` reads 55 TOC entries).
+- **The byte floor does not apply to a legitimately empty archive.** `$MinPhotosBytes` (100)
+  exists to catch a truncated tar, but an empty gzipped tar is ~45 bytes, so a Crate with no
+  items yet failed its backup on *every* run until the first scan. A job that cries wolf nightly
+  is how a real alarm gets ignored. The floor is now skipped when the photo-row count is **known
+  to be zero**; `-1` (count query failed) still enforces it, and the files-vs-rows cross-check
+  is unchanged. Found by running the backup right after emptying the archive, not by reading it.
+- **Scheduling, encryption, NAS delivery and retention live in `C:\Scripts`, not here.** The host
+  convention is that repo scripts produce a verified set and `C:\Scripts` promotes it:
+  `Backup-CrateArchive.ps1` (scheduled task "Crate Archive Backup", daily 04:30, offset from the
+  03:30 DB backup and 04:00 media-config backup) invokes this script into a temp staging dir,
+  gpg-encrypts `db.dump` and `photos.tar.gz` with the same key material as
+  `Backup-DragonflyDatabases.ps1`, and copies them to `\\Diskstation\Media2\Backups\Crate\` with
+  a 30-day prune. `MANIFEST.json` is promoted **in clear** on purpose so a freshness check can
+  read a set's age without the passphrase. Note the nightly `Dragonfly DB Backup` covers Crate's
+  *database* but is pg_dump-only and has never touched a Docker volume — before this task the
+  photos, which for a wardrobe archive are the actual artifact, had no backup at all.
 
 ## Auto price-drop scheduler (Phase 8, as built — the §9 documented exception)
 
