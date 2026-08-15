@@ -106,6 +106,12 @@ class ItemPhoto(Base):
         ForeignKey("items.id", ondelete="CASCADE"), index=True
     )
     order: Mapped[int] = mapped_column(Integer, default=0)
+    # What this photo is OF (app.apparel.PHOTO_ROLES), set by guided capture. Nullable
+    # because photos captured before guided capture existed have no known role — and
+    # "unknown" must stay distinguishable from "front", since role decides which photo
+    # becomes an eBay listing's gallery image. Never part of a filename: photo_store keys
+    # the on-disk names off `order`, so role must not imply a rename.
+    role: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Binaries live on the /data/photos volume; the DB stores paths only.
     original_path: Mapped[str] = mapped_column(String(512))
     cleaned_path: Mapped[str | None] = mapped_column(String(512), nullable=True)

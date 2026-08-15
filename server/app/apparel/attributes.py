@@ -19,6 +19,22 @@ SIZE_TYPES = ("regular", "petite", "plus", "big_tall", "juniors", "maternity")
 SLEEVE_LENGTHS = ("sleeveless", "short", "three_quarter", "long")
 FITS = ("slim", "regular", "relaxed", "oversized")
 
+# What a photo is a photo OF, set by the guided capture flow. Not an apparel *attribute*,
+# but it lives here for the same reason the others do: it is a controlled vocabulary that
+# needs normalize_enum, and the alternative is a second normalizer somewhere else.
+#
+# ORDER IS SEMANTIC — this tuple is the eBay listing order (see photo_role_rank), so the
+# first entry is the gallery/hero image and the last is the least presentable. Reordering
+# it changes what buyers see first. "tag" is deliberately last: a care label is genuine
+# size proof worth including, but it is nobody's idea of a cover photo.
+PHOTO_ROLES = ("front", "back", "detail", "tag")
+
+# The listing order, with the slot for "no role known" written out explicitly rather than
+# implied by arithmetic on PHOTO_ROLES. test_photo_roles.py asserts the two stay in sync,
+# so adding a role without deciding where it appears in a listing fails the suite.
+_LISTING_ORDER: tuple[str | None, ...] = ("front", "back", "detail", None, "tag")
+_UNKNOWN_ROLE_RANK = _LISTING_ORDER.index(None)
+
 # Tape-measure fields, inches, garment laid flat. Tops use chest/length/sleeve/shoulder;
 # bottoms use waist/inseam/rise. One union keeps the JSON shape stable across garment types
 # — an absent key just means "not measured", never "zero".
@@ -27,6 +43,33 @@ MEASUREMENT_KEYS = ("chest", "length", "sleeve", "shoulder", "waist", "inseam", 
 # A garment measurement above this is a typo or a unit mix-up (cm entered as inches), not a
 # real tape reading — 90" is longer than any wearable single garment dimension.
 _MAX_MEASUREMENT_IN = 90.0
+
+
+def photo_role_rank(role: str | None) -> int:
+    """Sort key for presenting an item's photos, lowest first.
+
+    eBay uses the FIRST uploaded photo as the listing's gallery image, and until roles
+    existed that was simply whichever photo happened to be taken first — so a tag-first
+    shoot put a care label on the face of a listing.
+
+    Two deliberate choices:
+
+    * A photo with **no role** sits ahead of "tag" but behind anything explicit. It is more
+      likely a garment shot than a label, and this is what makes the change invisible for
+      items captured before guided capture existed: every one of their photos gets the same
+      rank, so a stable sort leaves them in exactly their original order.
+    * An **unrecognised** role is treated as unknown rather than raising. The column is
+      nullable free-form text at the DB level, and a future client sending a role this
+      version has never heard of must not be able to break posting a listing.
+
+    This is a presentation-time ordering only. It must never be written back to
+    ItemPhoto.order: photo_store derives the on-disk filenames from that integer, so
+    renumbering would orphan every file.
+    """
+    try:
+        return _LISTING_ORDER.index(role)
+    except ValueError:
+        return _UNKNOWN_ROLE_RANK
 
 
 def normalize_enum(value: object, allowed: tuple[str, ...]) -> str | None:

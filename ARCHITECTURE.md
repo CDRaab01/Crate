@@ -125,6 +125,16 @@ keystore (`app/crate-debug.keystore`) with the suite-key release path in `releas
   A failed page is deliberately fatal: a notification that silently fails to send rebuilds the
   exact blind spot it was added to close. It cannot loop — "Notify" is absent from its own
   `workflows:` list, and `deploy.yml` watches `["CI"]` only.
+- **Listing photo order.** `upload_photos_to_eps` sorts by `photo_role_rank` — front, back,
+  detail, unknown, tag — rather than iterating `item.photos` in shoot order. eBay uses the
+  first uploaded photo as the listing's gallery image, so before this whatever you happened to
+  photograph first led the listing, and guided capture would have made that *worse* by
+  encouraging tag shots. The tag is included but last: real size proof buyers want, just not a
+  cover photo. Unknown-role photos share one rank and Python's sort is stable, so an item
+  captured before roles uploads in exactly its original order — backward compatibility is
+  structural rather than a special case. Presentation only; `ItemPhoto.order` is never
+  rewritten, because the on-disk filenames derive from it. This is the one part of the roles
+  feature CI verifies end to end, since eBay is always mocked at the transport.
 - **Health gate identity check.** The gate polls `127.0.0.1:8007/health` *and* asserts
   `/version` reports `name == "Crate API"`. `/health` returns an identical
   `{"status":"ok"}` in every suite app, so port alone cannot identify the responder — the
@@ -216,6 +226,58 @@ mark `failed` for the user and KEEP DRAINING (no poison rows). The review stack
 (`ui/review/`) lists server drafts, re-polls while any is processing, edits via the
 PATCH convention, dismisses via DELETE. Coil rides the app's OkHttp client so photo
 loads carry auth + the host rewrite.
+
+## Photo roles + the label pass (2026-08-15)
+
+`item_photos.role` (migration `0004`, nullable, `PHOTO_ROLES = front|back|detail|tag`) records
+what each photo is a photo *of*. The client sends it as a `roles` form field on `POST
+/items/scan`, index-aligned with `photos`; omitting it is valid and means unknown, which is
+what keeps every pre-guided-capture caller working. Unlike vision output, an unrecognised role
+is **rejected (422), not degraded** — it is a value our own client chose, so a bad one is a
+contract bug. Role is never part of a filename: `photo_store` derives `original_{n}`/
+`cleaned_{n}` from `order`, so cover-ness stays a derived property.
+
+Three things the role buys, none of which `order` could answer:
+
+- **The label pass.** `services/ai/label_prompts.py` + `read_label` in `vision.py`: one narrow
+  call that reads only what is printed on a care label (size, size_type, material). It runs
+  after identification, **before `signature_for_item`** — the clothing signature keys on brand
+  AND size, so a size discovered later would silently disable the duplicate fast-path — and
+  merges fill-never-overwrite. It is **best-effort with its own `except`**: allowed to reach the
+  outer handler, a label-call 503 would rewrite a perfectly good identification as
+  `identify_unavailable` and skip template matching and pricing. A failure logs a warning and
+  sets no `scan_error`; size simply stays null, which already means "go read the tag".
+- **Identification stops wasting a slot on the tag.** `MAX_IDENTIFY_PHOTOS` is 3 and read by
+  order, so a tag shot fourth previously reached no model at all. Garment shots are preferred
+  now, with tag photos as a fallback only if that is all there is.
+- **The eBay hero image.** See "Listing photo order" below.
+
+**Measured before shipping, three arms × three runs, against eight real tag photographs with
+two negative controls** (a brand-only tab, a care-symbols-only label):
+
+| arm | sizes read | controls kept clean |
+|---|---|---|
+| identify prompt on the cleaned photo (previous behaviour) | 3/18 | 6/6 |
+| label prompt on the cleaned photo | 10/18 | 6/6 |
+| **label prompt on the original photo (shipped)** | **12/18** | **6/6** |
+
+So the narrow pass roughly triples recall and invented a size **zero times in 18 control
+observations** — the bar a previous candidate prompt failed by confidently answering "M" for a
+label whose "S" is circled. The circled-size-run rule in `LABEL_USER_PROMPT` handles that case
+correctly now, and `test_label_prompts.py` asserts the guardrail strings literally, because a
+silent edit softening them would reintroduce exactly that failure.
+
+**The pass reads the ORIGINAL, not the cleaned copy** — that is what the third arm was for. The
+margin (12 vs 10) is small enough to be noise on its own, but `clean_photo` is built for
+garments on backgrounds and behaves unpredictably on a flat label: on one shirt it decided the
+woven brand tab was "the subject" and cropped the garment away. Worth knowing the two arms fail
+on *different* photographs — one jeans label reads cleaned-only — so a cleaned-copy retry when
+the original returns nothing is a credible follow-up, unmeasured as yet.
+
+Honest limits: `tests/fixtures/images.py::tag_photo` carries no legible text, so CI proves
+*routing* (which pass received which photo) and never OCR accuracy. Real accuracy is measured
+with `scripts/photo_smoke.py`, which infers roles from filenames (`*-tag.jpg`) so a real
+garment+tag pair can be pushed through a running server.
 
 ## Apparel + archive completeness (archive-first round, 2026-08-12)
 
