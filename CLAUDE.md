@@ -709,3 +709,41 @@ measurement table are in ARCHITECTURE.md (§"Photo roles + the label pass"); thi
   the hazards are the Room version bump silently wiping queued captures and orphaning their
   files, and `ImageBytes`' Q85 encode, which is a bigger legibility risk for fine label text
   than the 1600px cap is.
+
+## eBay goes live: sandbox keyset + the consent that would not complete (2026-08-15)
+
+The sandbox keyset arrived and Phase 5 met reality. Pricing went live in minutes (Browse
+app token minted, real comps returned, `price_item` fires on every scan). The one-time
+seller consent failed **six straight times**: consent rendered, accepted, and eBay
+redirected to `/ebay/callback` with no query string at all — `{"detail":"Missing
+code/state"}` in the user's face each time.
+
+- **Audit before the seventh attempt** (two wrong theories in, worth the pause). Everything
+  local was exonerated with evidence: query strings survive Tailscale Serve (probed), the
+  422 body proved requests reached FastAPI, no middleware touches queries,
+  `EBAY_ENVIRONMENT` exact. Root cause candidates re-ranked to two in-repo gaps — the
+  authorize call sent **no `prompt=login`** (an already-granted keyset re-consent is a
+  documented no-code redirect, so the FIRST accept poisoned every retry) and no base
+  `api_scope`. Both fixed; guardrail-string tests keep them fixed.
+- **`scripts/ebay_manual_consent.py`** — the redirect-independent consent: blank the
+  RuName's accepted URL, eBay's own success page carries the code in its URL, paste it to
+  the script (`docker compose cp` first; the image doesn't ship scripts/), which calls
+  `exchange_code` directly — `state` exists to bind a browser redirect, and there is none.
+  Permanent-grade for a single-user app (consent ≈ once per 18 months), and immune to
+  eBay's handling of the `:8446` callback. The `:443` portless-callback experiment stays
+  parked: that port is Magpie's, and the Serve namespace has already eaten one app's
+  ingress this summer.
+- Bare callbacks render a human HTML page now (was raw 422 JSON) + a warning log. New
+  tests close the audit's gaps: the bare-callback branch (untested before), a
+  realistically-shaped `v^1.1#...` code round-trip, and the fact that eBay's real redirect
+  also carries `expires_in`/`isAuthSuccessful`.
+- **Ops scar tissue from the same evening, recorded so it isn't repaid:** the first `.env`
+  edit pasted the eBay Cert ID *over* `CRATE_SMOKE_CLIENT_SECRET` (caught by the file
+  shrinking exactly 28 bytes; restored from dragonfly-id's `SMOKE_CLIENTS`, the
+  authoritative copy). A bare `docker compose up --force-recreate` wiped the `/version`
+  deploy stamp — `GIT_SHA`/`BUILT_AT` are exported by `redeploy.ps1`, so recreate via a
+  real deploy. And `!`-prefixed/`exec -T` shells have **no interactive stdin**: `read -s`
+  returns empty instantly, which is why the manual-consent script takes its code as argv.
+- **Verified:** 348 pytest green (14 new), ruff app gates clean; deploys green throughout.
+  **Still pending:** the post-fix consent retry (the discriminating test), then the first
+  real posting of the $15 polo draft; production keyset + account-deletion exemption.

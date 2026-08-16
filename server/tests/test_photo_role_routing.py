@@ -213,7 +213,8 @@ async def test_a_failing_label_pass_does_not_poison_a_good_identify(auth_client,
     """The trap this feature had to design around. If the label call's HTTPException reached
     the outer handler, a perfectly good identification would be reported as
     identify_unavailable and template matching + pricing would be skipped."""
-    from fastapi import HTTPException, status as http_status
+    from fastapi import HTTPException
+    from fastapi import status as http_status
 
     monkeypatch.setattr(scan_pipeline, "clean_photo", lambda b: b + b"-cleaned")
 
