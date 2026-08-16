@@ -35,7 +35,7 @@ class Measurements(BaseModel):
 
 
 class Dims(BaseModel):
-    l: float = Field(gt=0, le=120)  # noqa: E741 — l/w/h is the natural shipping vocabulary
+    l: float = Field(gt=0, le=120)
     w: float = Field(gt=0, le=120)
     h: float = Field(gt=0, le=120)
 

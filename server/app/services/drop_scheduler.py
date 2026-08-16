@@ -48,7 +48,7 @@ async def _floor_prompted(db: AsyncSession, item: Item) -> bool:
 async def drop_cycle(now: datetime.datetime | None = None) -> dict:
     """One pass over all active listings. Each item gets its own session so a rollback
     (eBay rejected the update) can't poison the rest of the pass. Returns counts."""
-    now = now or datetime.datetime.now(datetime.timezone.utc)
+    now = now or datetime.datetime.now(datetime.UTC)
     totals = {"dropped": 0, "floor_prompts": 0}
 
     async with AsyncSessionLocal() as db:

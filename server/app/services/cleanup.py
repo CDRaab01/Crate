@@ -30,7 +30,10 @@ def _remove_background(image_bytes: bytes) -> Image.Image | None:
         return None
     try:
         from rembg import remove  # heavy import (onnxruntime) — deliberately lazy
-    except Exception:  # pragma: no cover — exercised only in envs without rembg
+    except Exception:  # noqa: BLE001 - see below; pragma: no cover (envs without rembg)
+        # Deliberately blind: this import fails in more ways than ImportError (a broken
+        # onnxruntime build, a missing native lib, a CUDA stub). Any of them must degrade
+        # to the Pillow-only path, never 500 a scan.
         logger.warning("rembg unavailable; falling back to Pillow-only cleanup")
         return None
     try:

@@ -38,7 +38,7 @@ async def transition(db: AsyncSession, item: Item, new_status: str) -> Item:
     if new_status not in ALLOWED_TRANSITIONS.get(item.status, ()):
         raise IllegalTransition(item.status, new_status)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     if new_status == "active":
         item.date_listed = now
     if new_status == "sold":

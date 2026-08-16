@@ -33,8 +33,12 @@ _API_HOSTS = {
 }
 
 # Seller scopes: inventory (create/publish listings) + fulfillment (orders, tracking).
-USER_SCOPES = " ".join(
+# The base api_scope leads the list deliberately: it is the one scope every keyset holds,
+# eBay's own generated consent URLs include it, and its absence was one of two candidate
+# causes in the 2026-08-15 consent audit (eBay redirected to the accepted URL with no code).
+USER_SCOPES = " ".join(  # noqa: FLY002 - one scope per line stays readable and diffable
     [
+        "https://api.ebay.com/oauth/api_scope",
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
     ]
@@ -95,6 +99,13 @@ def authorize_url(user_id: str) -> str:
             "redirect_uri": settings.ebay_ru_name,
             "scope": USER_SCOPES,
             "state": state,
+            # Force the sign-in/consent screen every time. Without this, eBay treats a
+            # keyset the account has already granted as "nothing to ask" and redirects to
+            # the accepted URL WITHOUT a code — six consecutive bare callbacks in the
+            # 2026-08-15 audit, because the very first accept recorded the grant and every
+            # retry after it was a re-consent. Consent here is once per ~18 months, so
+            # always re-prompting costs nothing.
+            "prompt": "login",
         }
     )
     return f"{_auth_host()}/oauth2/authorize?{query}"
@@ -145,7 +156,7 @@ async def exchange_code(
         },
         client=client,
     )
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     expires_at = now + datetime.timedelta(seconds=int(body.get("expires_in", 7200)))
     refresh_expires_at = now + datetime.timedelta(
         seconds=int(body.get("refresh_token_expires_in", 47304000))  # ~18 months
@@ -187,7 +198,7 @@ async def user_token(db: AsyncSession, user_id, client: httpx.AsyncClient | None
             status.HTTP_409_CONFLICT, "eBay is not connected — run the one-time consent first"
         )
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     if creds.expires_at > now + datetime.timedelta(minutes=5):
         return decrypt(creds.access_token_enc)
 

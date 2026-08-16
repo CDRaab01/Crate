@@ -525,6 +525,28 @@ photographed, tagged, measured and boxed, so:
 - Client: Settings screen (connection status + one-time consent via browser + sign
   out); review cards gain "Post to eBay" (enabled only with title + chosen price).
 
+**Consent, hardened after first live contact (2026-08-15).** The flow above was born mocked
+and its first real run failed six straight times: eBay rendered consent, the user accepted,
+and the redirect arrived at `/ebay/callback` with **no query string at all**. The audit
+exonerated everything local (query strings survive Tailscale Serve; the 422 body proved the
+request reached FastAPI; no middleware touches queries) and found two authorize-call gaps,
+both now fixed:
+
+- **`prompt=login` is mandatory in `authorize_url`.** Without it, eBay treats an
+  already-granted keyset as "nothing to ask" and redirects WITHOUT a code — so the very
+  first accept poisons every retry. Consent is once per ~18 months; always re-prompting
+  costs nothing. `test_ebay_oauth.py` asserts the param as a guardrail string.
+- **The base `https://api.ebay.com/oauth/api_scope` leads `USER_SCOPES`** — the one scope
+  every keyset holds, present in eBay's own generated consent URLs.
+- **`scripts/ebay_manual_consent.py` is the redirect-independent path**: leave the RuName's
+  accepted URL blank, eBay lands on its own success page whose URL carries the code, paste
+  it to the script (`docker compose cp` in first — the image doesn't ship scripts/), which
+  calls `exchange_code` directly. `state` binds a browser redirect to a session; there is
+  no redirect here, so none is needed. Legitimate as a *permanent* flow for a single-user
+  app, and immune to however eBay feels about a `:8446` callback URL.
+- A bare callback now renders a **human HTML page** (what happened, what to do) instead of
+  raw 422 JSON, and logs a warning naming the situation.
+
 ## Pricing research (Phase 4, as built)
 
 - `app/pricing/comps.py` — the pure math, the ONLY source of price numbers: IQR (1.5×)
