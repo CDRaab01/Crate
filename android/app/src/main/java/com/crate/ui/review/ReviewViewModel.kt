@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.ItemDto
+import com.crate.data.remote.CategorySuggestionDto
 import com.crate.data.remote.ItemUpdateRequest
+import com.crate.data.remote.VocabulariesDto
 import com.crate.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,8 +30,52 @@ class ReviewViewModel @Inject constructor(
 
     private var polling = false
 
+    /** Server-owned dropdown vocabularies. Empty until loaded — the dialog degrades to
+     * showing whatever the draft already holds rather than blocking on the network. */
+    private val _vocabularies = MutableStateFlow(VocabulariesDto())
+    val vocabularies: StateFlow<VocabulariesDto> = _vocabularies
+
+    /** eBay category suggestions, per item id. Fetched when the dropdown is opened rather
+     * than for every draft: each lookup is a live eBay call, and most drafts in a batch
+     * capture are never expanded. */
+    private val _categorySuggestions =
+        MutableStateFlow<Map<String, List<CategorySuggestionDto>>>(emptyMap())
+    val categorySuggestions: StateFlow<Map<String, List<CategorySuggestionDto>>> =
+        _categorySuggestions
+
+    private val inFlightCategories = mutableSetOf<String>()
+
     init {
         refresh()
+        loadVocabularies()
+    }
+
+    private fun loadVocabularies() {
+        viewModelScope.launch {
+            try {
+                _vocabularies.value = api.vocabularies()
+            } catch (_: Exception) {
+                // Static reference data; a failure just means the dropdowns stay empty and
+                // the user can still see (and keep) the draft's existing values.
+            }
+        }
+    }
+
+    /** Load this item's category options once. Safe to call on every menu open. */
+    fun loadCategorySuggestions(id: String) {
+        if (id in inFlightCategories || _categorySuggestions.value.containsKey(id)) return
+        inFlightCategories += id
+        viewModelScope.launch {
+            try {
+                val found = api.categorySuggestions(id)
+                _categorySuggestions.value = _categorySuggestions.value + (id to found)
+            } catch (_: Exception) {
+                // Leave the key absent so opening the menu again retries — a 502 from eBay
+                // is usually transient, and caching the failure would strand the user.
+            } finally {
+                inFlightCategories -= id
+            }
+        }
     }
 
     fun refresh() {

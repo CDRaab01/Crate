@@ -520,6 +520,18 @@ photographed, tagged, measured and boxed, so:
   exists) → publish → `ebay_listing_id` stored + lifecycle draft→active.
   POST `/items/{id}/delist` withdraws the offer (active→delisted).
   `update_offer_price()` exists for manual edits + the Phase 8 drop scheduler.
+- **Review-stage dropdowns** (`routers/meta.py`, `services/ebay/taxonomy.py`, client
+  `DropdownField`). The fields eBay refuses a listing without are chosen by a human, not
+  guessed: Condition, eBay category, and — for clothing — Department and Size Type.
+  Vocabularies are served from `apparel/attributes.py` rather than duplicated in Kotlin (a
+  hardcoded copy drifts into 422s the user cannot act on), labels included, because
+  `big_tall` is a wire value and "Big & Tall" is what a person picks.
+  Category options come from **eBay's taxonomy API, never the vision model**: ids are eBay's,
+  versioned (tree v134 today), and a hallucinated one fails at publish. Gemma supplies the
+  words; eBay supplies the id. Suggestions load on menu-open, not per scan — each is a live
+  call and most drafts in a batch are never expanded. `readyToPost()` mirrors
+  `sell._require_ready` so the button is not *offered* on an incomplete draft, kept in step
+  by `ReviewGatingTest`.
 - **Apparel item specifics** (`apparel_aspects()`). `attributes.py` deferred this mapping
   until a keyset existed rather than guess eBay's strings; the values are now checked
   against a live `get_item_aspects_for_category` call. eBay *requires* Brand, Color, Size,
