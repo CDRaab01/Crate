@@ -59,6 +59,69 @@ def ebay_condition(item: Item) -> str:
     return _CONDITION_MAP.get(item.condition, "USED_GOOD")
 
 
+# Our apparel vocabularies → eBay's aspect values. attributes.py deliberately deferred this
+# ("Mapping to eBay's aspect values happens in services/ebay/sell.py when a keyset exists"),
+# because guessing eBay's exact strings before one could be verified would have baked in an
+# unverifiable assumption. The keyset exists now and these are checked against the live
+# get_item_aspects_for_category response for the Polos category.
+_EBAY_DEPARTMENT = {
+    "mens": "Men",
+    "womens": "Women",
+    "unisex": "Unisex Adults",
+    "boys": "Boys",
+    "girls": "Girls",
+}
+_EBAY_SIZE_TYPE = {
+    "regular": "Regular",
+    "petite": "Petite",
+    "plus": "Plus",
+    "big_tall": "Big & Tall",
+    "juniors": "Juniors",
+    "maternity": "Maternity",
+}
+_EBAY_SLEEVE_LENGTH = {
+    "sleeveless": "Sleeveless",
+    "short": "Short Sleeve",
+    "three_quarter": "3/4 Sleeve",
+    "long": "Long Sleeve",
+}
+_EBAY_FIT = {
+    "slim": "Slim",
+    "regular": "Regular",
+    "relaxed": "Relaxed",
+    "oversized": "Oversized",
+}
+
+# eBay REQUIRES these five on a clothing listing — omitting any one fails the publish with
+# errorId 25002 ("The item specific Size is missing"), after photos, inventory item and
+# offer have all already been created. Checking them up front turns that into an honest 422
+# naming the gap, and keeps the half-built listing from existing at all.
+APPAREL_REQUIRED_FIELDS = ("brand", "color", "size", "size_type", "department")
+
+
+def apparel_aspects(item: Item) -> dict[str, list[str]]:
+    """eBay item specifics from the apparel block. Empty for non-clothing.
+
+    Only fields the human or the tag actually supplied are sent: a missing value is left
+    out rather than defaulted, because an item specific is a claim about the garment that a
+    buyer reads and pays against. The required five are enforced by _require_ready instead,
+    so the failure is a clear 422 rather than an invented "Regular".
+    """
+    if item.item_kind != "clothing":
+        return {}
+    mapped = {
+        "Color": item.color,
+        "Size": item.size,
+        "Material": item.material,
+        "Type": item.style,
+        "Size Type": _EBAY_SIZE_TYPE.get(item.size_type or ""),
+        "Department": _EBAY_DEPARTMENT.get(item.department or ""),
+        "Sleeve Length": _EBAY_SLEEVE_LENGTH.get(item.sleeve_length or ""),
+        "Fit": _EBAY_FIT.get(item.fit or ""),
+    }
+    return {name: [value] for name, value in mapped.items() if value}
+
+
 _TRADING_HOSTS = {
     "production": "https://api.ebay.com/ws/api.dll",
     "sandbox": "https://api.sandbox.ebay.com/ws/api.dll",
@@ -172,6 +235,15 @@ def _require_ready(item: Item) -> None:
         missing.append("eBay category")
     if not item.photos:
         missing.append("photos")
+    if item.item_kind == "clothing":
+        # These are hand-only fields (completeness.HAND_ONLY_FIELDS) for the most part —
+        # read off the tag. Naming them here sends the human back to the garment while it
+        # is still in reach, which is the whole premise of the archive-first workflow.
+        missing.extend(
+            field.replace("_", " ")
+            for field in APPAREL_REQUIRED_FIELDS
+            if not getattr(item, field, None)
+        )
     if missing:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -210,6 +282,7 @@ async def publish_item(
             aspects["Brand"] = [item.brand]
         if item.model:
             aspects["Model"] = [item.model]
+        aspects.update(apparel_aspects(item))
 
         inv = await active.put(
             f"{oauth.api_host()}/sell/inventory/v1/inventory_item/{sku}",
