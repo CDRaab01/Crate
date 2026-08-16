@@ -1,6 +1,7 @@
 """Seller OAuth: connect/callback state flow, Fernet-encrypted persistence, refresh."""
 
 import datetime
+import logging
 
 import httpx
 import pytest
@@ -279,3 +280,36 @@ def test_manual_consent_rejects_url_without_code():
     module = _load_manual_consent_module()
     with pytest.raises(SystemExit):
         module.extract_code("https://example.com/callback?error=access_denied")
+
+
+async def test_bare_callback_carries_the_fragment_probe(client):
+    """The bare page ships JS that bounces the whole URL back.
+
+    A fragment never reaches the server, so nine identical bare callbacks cannot rule out
+    eBay returning the code after a '#'. Only the landed page can see it. The script must
+    be inert unless there IS a fragment, or it would bounce every ordinary bare callback.
+    """
+    resp = await client.get("/ebay/callback")
+    assert resp.status_code == 400
+    body = resp.text
+    assert "probe=" in body
+    assert "indexOf('#') !== -1" in body  # no fragment => no bounce
+    assert "probe=') === -1" in body  # already probing => no bounce (loop guard)
+
+
+async def test_probe_arrival_is_logged_and_does_not_recurse(client, caplog):
+    """A probe arrival logs the URL and renders a terminal page — no script, no loop."""
+    landed = "https://dragonfly.tail2ce561.ts.net:8446/ebay/callback#code=v%5E1.1%23i%5E1"
+    with caplog.at_level(logging.WARNING):
+        resp = await client.get("/ebay/callback", params={"probe": landed})
+    assert resp.status_code == 400
+    assert "#code=" in caplog.text  # the whole point: the fragment reaches the log
+    assert "probe=" not in resp.text  # terminal page, no further bouncing
+
+
+async def test_probe_value_is_truncated_in_the_log(client, caplog):
+    """The route is unauthenticated, so the probe value is attacker-supplied text."""
+    with caplog.at_level(logging.WARNING):
+        await client.get("/ebay/callback", params={"probe": "x" * 5000})
+    assert "x" * 500 in caplog.text
+    assert "x" * 1000 not in caplog.text

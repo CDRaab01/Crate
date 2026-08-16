@@ -30,15 +30,46 @@ async def connect(request: Request, user: CurrentUser):
     return {"authorize_url": oauth.authorize_url(str(user.id))}
 
 
+# Injected into the bare-callback page. A URL fragment (anything after '#') NEVER leaves
+# the browser, so if eBay were returning the code that way the server would see exactly what
+# it has seen nine times running: a bare GET. Only JS in the landed page can tell us. It
+# bounces the full original URL back as a query param, which lands in the access log — no
+# copy-paste from a user who may well be on a phone.
+#
+# Loop-safe twice over: the bounce target carries no fragment, and `probe` short-circuits the
+# branch that serves this script.
+_PROBE_SCRIPT = """<script>
+(function () {
+  try {
+    var here = window.location.href;
+    if (window.location.search.indexOf('probe=') === -1 && here.indexOf('#') !== -1) {
+      window.location.replace('/ebay/callback?probe=' + encodeURIComponent(here));
+    }
+  } catch (e) {}
+})();
+</script>"""
+
+
 @router.get("/callback", response_class=HTMLResponse)
 async def callback(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     code: str | None = None,
     state: str | None = None,
+    probe: str | None = None,
 ):
     """eBay's redirect target (unauthenticated — the browser carries no bearer token; the
     one-time `state` minted by /ebay/connect is what proves the session)."""
+    if probe:
+        # Diagnostic only — never trusted, never stored, and truncated because this route
+        # is unauthenticated and the value is attacker-supplied text.
+        logger.warning("eBay callback fragment probe: %s", probe[:500])
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;max-width:34rem;margin:3rem auto'>"
+            "<h2>Diagnostic captured</h2><p>Nothing more to do here — the full redirect "
+            "URL has been written to Crate's log.</p></body></html>",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     if not code or not state:
         # eBay CAN legitimately arrive here empty-handed: a declined consent, or the
         # already-granted no-reprompt path (the 2026-08-15 audit's six bare callbacks).
@@ -62,6 +93,7 @@ async def callback(
             "<p>Try <b>Connect eBay</b> again from Crate's settings. If it keeps "
             "happening, use the manual path: <code>scripts/ebay_manual_consent.py</code> "
             "(see its docstring).</p>"
+            f"{_PROBE_SCRIPT}"
             "</body></html>",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
