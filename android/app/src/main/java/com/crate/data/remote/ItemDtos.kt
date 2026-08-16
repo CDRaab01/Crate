@@ -197,3 +197,29 @@ data class ItemUpdateRequest(
     @SerialName("measurements_in") val measurementsIn: Map<String, Double>? = null,
     @SerialName("storage_location") val storageLocation: String? = null,
 )
+
+/** One option in a server-owned controlled vocabulary.
+ *
+ * `value` is what the API validates ("big_tall"); `label` is what a human picks from a menu
+ * ("Big & Tall"). Both come from the server so a new vocabulary entry cannot silently drift
+ * out of sync with what the client offers. */
+@Serializable
+data class VocabularyEntryDto(val value: String, val label: String)
+
+@Serializable
+data class VocabulariesDto(
+    val departments: List<VocabularyEntryDto> = emptyList(),
+    @SerialName("size_types") val sizeTypes: List<VocabularyEntryDto> = emptyList(),
+    @SerialName("sleeve_lengths") val sleeveLengths: List<VocabularyEntryDto> = emptyList(),
+    val fits: List<VocabularyEntryDto> = emptyList(),
+    val conditions: List<VocabularyEntryDto> = emptyList(),
+)
+
+/** An eBay category option. `path` is the breadcrumb — two categories can share a leaf name,
+ * and the wrong one puts a listing in front of the wrong buyers. */
+@Serializable
+data class CategorySuggestionDto(
+    @SerialName("category_id") val categoryId: String,
+    val name: String,
+    val path: String,
+)

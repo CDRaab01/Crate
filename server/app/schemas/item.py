@@ -220,3 +220,15 @@ class ScanAccepted(BaseModel):
 
 
 STATUSES = ITEM_STATUSES
+
+
+class CategorySuggestionOut(BaseModel):
+    """One eBay category option for the review screen's dropdown.
+
+    `path` is the breadcrumb ("Men > Men's Clothing > Shirts"): two categories can share a
+    leaf name, and picking the wrong one puts a listing in front of the wrong buyers.
+    """
+
+    category_id: str
+    name: str
+    path: str

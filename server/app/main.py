@@ -14,6 +14,7 @@ from app.routers import (
     ebay,
     items,
     messages,
+    meta,
     shipping,
     suite_auth,
     templates,
@@ -89,6 +90,7 @@ app.include_router(auth.router)
 app.include_router(suite_auth.router)
 app.include_router(users.router)
 app.include_router(items.router)
+app.include_router(meta.router)
 app.include_router(templates.router)
 app.include_router(ebay.router)
 app.include_router(messages.router)
