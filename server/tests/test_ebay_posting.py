@@ -4,9 +4,11 @@ Every eBay call mocked at the transport (CLAUDE.md §8)."""
 import datetime
 import re
 import uuid
+from decimal import Decimal
 
 import httpx
 import pytest
+from fastapi import HTTPException
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -222,3 +224,62 @@ def test_used_apparel_is_never_promoted_to_a_new_grade():
 def test_unknown_apparel_condition_falls_back_to_a_used_grade():
     """An unrecognised condition must not silently become "new"."""
     assert sell.ebay_condition(Item(item_kind="clothing", condition="wat")) == "USED_EXCELLENT"
+
+
+def test_apparel_aspects_map_our_vocabularies_to_ebays():
+    """attributes.py deferred this mapping until a keyset existed; these are the live values."""
+    item = Item(
+        item_kind="clothing",
+        brand="Lands End",
+        color="White",
+        size="S",
+        size_type="big_tall",
+        department="mens",
+        material="Cotton",
+        style="Polo",
+        sleeve_length="long",
+        fit="regular",
+    )
+    aspects = sell.apparel_aspects(item)
+    assert aspects["Size"] == ["S"]
+    assert aspects["Size Type"] == ["Big & Tall"]  # not "big_tall"
+    assert aspects["Department"] == ["Men"]  # not "mens"
+    assert aspects["Sleeve Length"] == ["Long Sleeve"]  # not "long"
+    assert aspects["Type"] == ["Polo"]
+    assert aspects["Color"] == ["White"]
+
+
+def test_apparel_aspects_omit_unknown_values_rather_than_inventing_them():
+    """An item specific is a claim a buyer pays against — a gap is left blank, not guessed."""
+    item = Item(item_kind="clothing", size="S", size_type=None, department=None, fit="wat")
+    aspects = sell.apparel_aspects(item)
+    assert "Size Type" not in aspects
+    assert "Department" not in aspects
+    assert "Fit" not in aspects  # unrecognised enum is dropped, never passed through raw
+
+
+def test_general_items_get_no_apparel_aspects():
+    assert sell.apparel_aspects(Item(item_kind="general", size="S")) == {}
+
+
+def test_require_ready_names_every_missing_apparel_specific():
+    """eBay fails the publish AFTER creating photos, inventory item and offer. Catching it
+    up front is what stops a half-built listing existing on eBay at all."""
+    item = Item(
+        item_kind="clothing",
+        title="Polo",
+        chosen_price=Decimal("15.00"),
+        condition="good",
+        category_id="185101",
+        photos=[ItemPhoto(order=0, original_path="/x.png")],
+        brand="Lands End",
+        color=None,
+        size="S",
+        size_type=None,
+        department="mens",
+    )
+    with pytest.raises(HTTPException) as exc:
+        sell._require_ready(item)
+    assert "color" in exc.value.detail
+    assert "size type" in exc.value.detail
+    assert "brand" not in exc.value.detail  # present, must not be reported missing

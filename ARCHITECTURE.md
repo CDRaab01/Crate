@@ -520,6 +520,14 @@ photographed, tagged, measured and boxed, so:
   exists) → publish → `ebay_listing_id` stored + lifecycle draft→active.
   POST `/items/{id}/delist` withdraws the offer (active→delisted).
   `update_offer_price()` exists for manual edits + the Phase 8 drop scheduler.
+- **Apparel item specifics** (`apparel_aspects()`). `attributes.py` deferred this mapping
+  until a keyset existed rather than guess eBay's strings; the values are now checked
+  against a live `get_item_aspects_for_category` call. eBay *requires* Brand, Color, Size,
+  Size Type and Department on a clothing listing, and enforces it at **publish** — i.e.
+  after EPS photos, the inventory item and the offer already exist. `_require_ready` checks
+  them up front so the failure is a 422 naming the gaps instead of a half-built listing
+  stranded on eBay. Unknown values are omitted, never defaulted: an item specific is a claim
+  a buyer pays against, and an unrecognised enum is dropped rather than passed through raw.
 - **Apparel conditions are a separate vocabulary** (`ebay_condition()`). eBay's clothing
   categories accept the "new" grades plus a *single* used grade (3000, "Pre-owned"); a
   garment published as `USED_GOOD` is rejected with errorId 25059. So `like_new|good|fair|
