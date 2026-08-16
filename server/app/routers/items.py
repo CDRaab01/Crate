@@ -29,11 +29,19 @@ from app.models.sale import Sale
 from app.pricing import browse
 from app.pricing import service as pricing_service
 from app.pricing.comps import compute_prices
-from app.schemas.item import CompOut, CompsOut, ItemOut, ItemUpdate, SaleOut, ScanAccepted
+from app.schemas.item import (
+    CategorySuggestionOut,
+    CompOut,
+    CompsOut,
+    ItemOut,
+    ItemUpdate,
+    SaleOut,
+    ScanAccepted,
+)
 from app.schemas.template import PriceEventOut
 from app.security import CurrentUser
 from app.services import item_lifecycle, photo_store, scan_pipeline
-from app.services.ebay import sell
+from app.services.ebay import sell, taxonomy
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -316,6 +324,34 @@ async def comps(
         patient=suggestion.patient if suggestion else None,
         comp_count=suggestion.comp_count if suggestion else 0,
     )
+
+
+@router.get("/{item_id}/category-suggestions", response_model=list[CategorySuggestionOut])
+@limiter.limit("30/minute")
+async def category_suggestions(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """eBay's own category suggestions for this draft — the review screen's dropdown.
+
+    Deliberately not derived from the vision model: category ids are eBay's, versioned, and
+    a hallucinated one fails at publish. Gemma supplies the words, eBay supplies the id.
+    """
+    if not taxonomy.configured():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "eBay keyset not configured — category suggestions are unavailable",
+        )
+    item = await _owned_item(db, user.id, item_id)
+    try:
+        found = await taxonomy.suggest_categories(item)
+    except httpx.HTTPError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "eBay category lookup failed")
+    return [
+        CategorySuggestionOut(category_id=s.category_id, name=s.name, path=s.path) for s in found
+    ]
 
 
 @router.get("/{item_id}/sale", response_model=SaleOut)

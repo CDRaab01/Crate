@@ -38,8 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.BuildConfig
+import com.crate.data.remote.CategorySuggestionDto
 import com.crate.data.remote.ItemDto
 import com.crate.data.remote.ItemUpdateRequest
+import com.crate.data.remote.VocabulariesDto
+import com.crate.ui.components.DropdownField
 import com.crate.ui.components.ArchiveGapRow
 import com.crate.ui.components.GarmentDetailsDialog
 import com.crate.ui.components.apparelSummary
@@ -65,6 +68,8 @@ fun ReviewScreen(
 ) {
     val drafts by viewModel.drafts.collectAsState()
     val refreshing by viewModel.refreshing.collectAsState()
+    val vocabularies by viewModel.vocabularies.collectAsState()
+    val categorySuggestions by viewModel.categorySuggestions.collectAsState()
 
     OnResumeEffect { viewModel.refresh() }
 
@@ -122,6 +127,11 @@ fun ReviewScreen(
                                 onDismiss = { viewModel.dismiss(item.id) },
                                 onChoosePrice = { price -> viewModel.choosePrice(item.id, price) },
                                 onPost = { done -> viewModel.post(item.id, done) },
+                                vocabularies = vocabularies,
+                                categorySuggestions = categorySuggestions[item.id].orEmpty(),
+                                onLoadCategories = {
+                                    viewModel.loadCategorySuggestions(item.id)
+                                },
                             )
                         }
                     }
@@ -138,6 +148,9 @@ internal fun DraftCard(
     onDismiss: () -> Unit,
     onChoosePrice: (String) -> Unit,
     onPost: ((String?) -> Unit) -> Unit,
+    vocabularies: VocabulariesDto = VocabulariesDto(),
+    categorySuggestions: List<CategorySuggestionDto> = emptyList(),
+    onLoadCategories: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
     var editingGarment by remember { mutableStateOf(false) }
@@ -276,8 +289,8 @@ internal fun DraftCard(
                                 postError = error
                             }
                         },
-                        enabled = !posting && item.title != null && item.chosenPrice != null,
-                        gradient = if (!posting && item.title != null && item.chosenPrice != null) {
+                        enabled = !posting && readyToPost(item),
+                        gradient = if (!posting && readyToPost(item)) {
                             CrateTheme.colors.heroGradient
                         } else {
                             null
@@ -337,6 +350,9 @@ internal fun DraftCard(
     if (editing) {
         EditDialog(
             item = item,
+            vocabularies = vocabularies,
+            categorySuggestions = categorySuggestions,
+            onLoadCategories = onLoadCategories,
             onSave = { update -> onSave(update) { ok -> if (ok) editing = false } },
             onCancel = { editing = false },
         )
@@ -352,6 +368,31 @@ internal fun DraftCard(
 }
 
 /** Strategy name on the left, mono price on the right — the price never wraps. */
+/**
+ * Whether the server will accept a post, mirroring `sell._require_ready`.
+ *
+ * Deliberately duplicated rather than inferred from a server flag: the point is that the
+ * button is *not offered* until the draft is complete. eBay enforces the clothing specifics
+ * at publish — after photos, the inventory item and the offer have all been created — so a
+ * hopeful tap costs a half-built listing on eBay, not just an error toast.
+ *
+ * The list stays in step with the server by test, not by hope: `ReviewGatingTest` asserts
+ * the same field names the API requires.
+ */
+internal fun readyToPost(item: ItemDto): Boolean {
+    if (item.title.isNullOrBlank() || item.chosenPrice == null) return false
+    if (item.condition.isNullOrBlank() || item.categoryId.isNullOrBlank()) return false
+    if (item.photos.isEmpty()) return false
+    if (item.itemKind == "clothing") {
+        return !item.brand.isNullOrBlank() &&
+            !item.color.isNullOrBlank() &&
+            !item.size.isNullOrBlank() &&
+            !item.sizeType.isNullOrBlank() &&
+            !item.department.isNullOrBlank()
+    }
+    return true
+}
+
 @Composable
 private fun PriceStrategyCard(
     name: String,
@@ -379,14 +420,20 @@ private fun PriceStrategyCard(
 @Composable
 private fun EditDialog(
     item: ItemDto,
+    vocabularies: VocabulariesDto,
+    categorySuggestions: List<CategorySuggestionDto>,
+    onLoadCategories: () -> Unit,
     onSave: (ItemUpdateRequest) -> Unit,
     onCancel: () -> Unit,
 ) {
     var title by remember { mutableStateOf(item.title ?: "") }
     var brand by remember { mutableStateOf(item.brand ?: "") }
     var model by remember { mutableStateOf(item.model ?: "") }
-    var condition by remember { mutableStateOf(item.condition ?: "") }
+    var condition by remember { mutableStateOf(item.condition) }
     var description by remember { mutableStateOf(item.description ?: "") }
+    var categoryId by remember { mutableStateOf(item.categoryId) }
+    var sizeType by remember { mutableStateOf(item.sizeType) }
+    var department by remember { mutableStateOf(item.department) }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -396,11 +443,48 @@ private fun EditDialog(
                 OutlinedTextField(title, { title = it }, label = { Text("Title (80 max)") })
                 OutlinedTextField(brand, { brand = it }, label = { Text("Brand") })
                 OutlinedTextField(model, { model = it }, label = { Text("Model") })
-                OutlinedTextField(
-                    condition,
-                    { condition = it },
-                    label = { Text("Condition (new/like_new/good/fair/poor)") },
+                // Controlled vocabularies are dropdowns, not free text: every one of these
+                // is validated server-side, so a typo here used to surface as a 422 at post
+                // time — after the human had already put the garment back in the box.
+                DropdownField(
+                    label = "Condition",
+                    value = condition,
+                    options = vocabularies.conditions.map { it.value to it.label },
+                    onSelect = { condition = it },
                 )
+                DropdownField(
+                    label = "eBay category",
+                    value = categoryId,
+                    // Labelled by breadcrumb, not leaf name: "Polos" alone does not say
+                    // whether it sits under Men, Women or Boys.
+                    options = categorySuggestions.map {
+                        it.categoryId to listOf(it.path, it.name).filter(String::isNotBlank)
+                            .joinToString(" > ")
+                    },
+                    onSelect = { categoryId = it },
+                    placeholder = "Tap to load eBay suggestions",
+                    supporting = "Suggested by eBay from the title — required to post",
+                    onOpen = onLoadCategories,
+                )
+                if (item.itemKind == "clothing") {
+                    DropdownField(
+                        label = "Department",
+                        value = department,
+                        options = vocabularies.departments.map { it.value to it.label },
+                        onSelect = { department = it },
+                        supporting = "Required by eBay for clothing",
+                    )
+                    DropdownField(
+                        label = "Size type",
+                        value = sizeType,
+                        options = vocabularies.sizeTypes.map { it.value to it.label },
+                        onSelect = { sizeType = it },
+                        // Tags print "S", not "S Regular", so the label pass legitimately
+                        // returns null here on most garments. This is a human call, and
+                        // eBay refuses the listing without it.
+                        supporting = "Usually Regular — tags rarely print this",
+                    )
+                }
                 OutlinedTextField(
                     description,
                     { description = it },
@@ -418,8 +502,11 @@ private fun EditDialog(
                         title = title.take(80),
                         brand = brand,
                         model = model,
-                        condition = condition.ifBlank { null },
+                        condition = condition,
                         description = description,
+                        categoryId = categoryId,
+                        sizeType = sizeType,
+                        department = department,
                     )
                 )
             }) { Text("Save") }
