@@ -56,7 +56,9 @@ def recording_pipeline(monkeypatch):
 
 def _files(*roles):
     """One distinguishable PNG per photo, plus the parallel roles field."""
-    files = [("photos", (f"p{i}.png", FAKE_PNG + bytes([i]), "image/png")) for i in range(len(roles))]
+    files = [
+        ("photos", (f"p{i}.png", FAKE_PNG + bytes([i]), "image/png")) for i in range(len(roles))
+    ]
     files += [("roles", (None, role)) for role in roles if role is not None]
     return files
 
@@ -83,9 +85,7 @@ async def test_roles_are_stored_per_photo(auth_client, recording_pipeline):
 
 async def test_roles_are_optional(auth_client, recording_pipeline):
     """Every pre-guided-capture client — including the deploy smoke — sends none."""
-    r = await auth_client.post(
-        "/items/scan", files=[("photos", ("p0.png", FAKE_PNG, "image/png"))]
-    )
+    r = await auth_client.post("/items/scan", files=[("photos", ("p0.png", FAKE_PNG, "image/png"))])
     assert r.status_code == 202
     item = await _wait_processed(auth_client, r.json()["id"])
     assert [p["role"] for p in item["photos"]] == [None]
@@ -191,8 +191,12 @@ async def test_label_never_overwrites_what_identification_read(auth_client, monk
 
     async def fake_identify(urls, client=None):
         return IdentifyDraft(
-            title="Shirt", description="A shirt.", item_kind="clothing", size="L",
-            material="Linen", confidence="high",
+            title="Shirt",
+            description="A shirt.",
+            item_kind="clothing",
+            size="L",
+            material="Linen",
+            confidence="high",
         )
 
     async def fake_read_label(urls, client=None):
@@ -220,8 +224,11 @@ async def test_a_failing_label_pass_does_not_poison_a_good_identify(auth_client,
 
     async def fake_identify(urls, client=None):
         return IdentifyDraft(
-            title="Navy button-up", description="A shirt.", item_kind="clothing",
-            brand="Orvis", confidence="high",
+            title="Navy button-up",
+            description="A shirt.",
+            item_kind="clothing",
+            brand="Orvis",
+            confidence="high",
         )
 
     async def dead_label(urls, client=None):

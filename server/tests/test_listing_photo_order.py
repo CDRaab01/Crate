@@ -51,9 +51,7 @@ async def _seed_item_with_photos(user_id, tmp_path, roles) -> tuple[uuid.UUID, d
             path = tmp_path / f"orig_{order}.png"
             path.write_bytes(marker)
             marker_by_role[order] = marker
-            db.add(
-                ItemPhoto(item_id=item.id, order=order, role=role, original_path=str(path))
-            )
+            db.add(ItemPhoto(item_id=item.id, order=order, role=role, original_path=str(path)))
         await db.commit()
         return item.id, marker_by_role
 
@@ -84,9 +82,7 @@ async def _upload_order(item_id, recorder) -> list[bytes]:
         (["front", "back", "tag"], "front"),
     ],
 )
-async def test_hero_image_is_never_the_tag(
-    auth_client, tmp_path, shot_order, expected_first
-):
+async def test_hero_image_is_never_the_tag(auth_client, tmp_path, shot_order, expected_first):
     item_id, markers = await _seed_item_with_photos(auth_client.user_id, tmp_path, shot_order)
     recorder = EpsRecorder()
     uploaded = await _upload_order(item_id, recorder)
@@ -126,9 +122,7 @@ async def test_roleless_item_keeps_its_original_order(auth_client, tmp_path):
     recorder = EpsRecorder()
     uploaded = await _upload_order(item_id, recorder)
 
-    order_seen = [
-        next(o for o, m in markers.items() if m in blob) for blob in uploaded
-    ]
+    order_seen = [next(o for o, m in markers.items() if m in blob) for blob in uploaded]
     assert order_seen == [0, 1, 2]
 
 

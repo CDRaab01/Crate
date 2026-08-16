@@ -46,7 +46,7 @@ async def test_item_lifecycle_round_trip():
                 item_id=item.id,
                 ebay_order_id=f"order-{uuid.uuid4().hex[:10]}",
                 sale_price=Decimal("17.55"),
-                sale_date=datetime.datetime.now(datetime.timezone.utc),
+                sale_date=datetime.datetime.now(datetime.UTC),
                 buyer_username="fish4life",
                 buyer_address={"name": "B", "city": "Lansing", "state": "MI"},
             )

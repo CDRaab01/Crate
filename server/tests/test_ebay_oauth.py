@@ -121,7 +121,7 @@ async def test_user_token_refreshes_when_expiring(auth_client, monkeypatch):
         await db.commit()
 
     rec: dict = {}
-    async with httpx.AsyncClient(transport=token_transport(rec)) as http:
+    async with httpx.AsyncClient(transport=token_transport(rec)) as http:  # noqa: SIM117 - combining exceeds the 100-char limit; the nesting is clearer
         async with AsyncSessionLocal() as db:
             token = await oauth.user_token(db, auth_client.user_id, client=http)
     assert token == "user-access"
