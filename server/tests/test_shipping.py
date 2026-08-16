@@ -96,12 +96,12 @@ async def _seed_sold(user_id, *, confirmed=False) -> Item:
                 item_id=item.id,
                 ebay_order_id=f"ORDER-{item.id.hex[:8]}",
                 sale_price=Decimal("15.00"),
-                sale_date=datetime.datetime.now(datetime.timezone.utc),
+                sale_date=datetime.datetime.now(datetime.UTC),
                 buyer_username="fish4life",
                 buyer_address=BUYER_ADDRESS,
             )
         )
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         db.add(
             EbayCredentials(
                 user_id=user_id,
@@ -290,7 +290,7 @@ async def test_push_tracking_calls_ebay(auth_client):
         assert body["lineItems"] == [{"lineItemId": "LI-1"}, {"lineItemId": "LI-2"}]
         return httpx.Response(201, json={})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:  # noqa: SIM117 - combining exceeds the 100-char limit; the nesting is clearer
         async with AsyncSessionLocal() as db:
             await fulfillment.push_tracking(
                 db, auth_client.user_id, "ORDER-X", "TRACK-9", "USPS", client=http

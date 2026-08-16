@@ -30,9 +30,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff==0.16.2
-      - run: ruff check app
+      # tests/ is linted too. It went unlinted until 2026-08-16 and had 13 findings
+      # sitting in it — test code is where the suite's conventions get read from, so
+      # leaving it unchecked lets drift accumulate exactly where it is most copied.
+      - run: ruff check app tests
         working-directory: server
-      - run: ruff format --check app
+      - run: ruff format --check app tests
         working-directory: server
 
   server-test:

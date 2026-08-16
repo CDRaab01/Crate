@@ -88,9 +88,14 @@ class _Item:
     """Minimal stand-in for the ORM Item — signature_for_item only reads attributes."""
 
     def __init__(self, **kw):
-        defaults = dict(
-            item_kind="general", brand=None, model=None, style=None, size=None, department=None
-        )
+        defaults = {
+            "item_kind": "general",
+            "brand": None,
+            "model": None,
+            "style": None,
+            "size": None,
+            "department": None,
+        }
         defaults.update(kw)
         for key, value in defaults.items():
             setattr(self, key, value)

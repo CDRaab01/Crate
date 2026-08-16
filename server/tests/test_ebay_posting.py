@@ -8,8 +8,8 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from fastapi import HTTPException
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -95,7 +95,7 @@ async def _seed_ready_item(user_id, tmp_path) -> uuid.UUID:
         db.add(item)
         await db.flush()
         db.add(ItemPhoto(item_id=item.id, order=0, original_path=str(photo_file)))
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         db.add(
             EbayCredentials(
                 user_id=user_id,
@@ -116,15 +116,14 @@ async def test_publish_happy_path(auth_client, tmp_path, monkeypatch):
 
     # Call the service directly with an injected transport — the endpoint's own client
     # can't be swapped per-test, and the service IS the posting logic.
-    async with httpx.AsyncClient(transport=fake.transport()) as http:
-        async with AsyncSessionLocal() as db:
-            item = (
-                await db.execute(
-                    select(Item).options(selectinload(Item.photos)).where(Item.id == item_id)
-                )
-            ).scalar_one()
-            listing_id = await sell.publish_item(db, item, client=http)
-            await db.commit()
+    async with httpx.AsyncClient(transport=fake.transport()) as http, AsyncSessionLocal() as db:
+        item = (
+            await db.execute(
+                select(Item).options(selectinload(Item.photos)).where(Item.id == item_id)
+            )
+        ).scalar_one()
+        listing_id = await sell.publish_item(db, item, client=http)
+        await db.commit()
 
     assert listing_id == "110123456789"
     # EPS first, then location ensure, inventory PUT, offer POST, publish POST.

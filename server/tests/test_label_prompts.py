@@ -95,7 +95,9 @@ def test_messages_carry_every_image():
     urls = ["data:image/png;base64,AAA", "data:image/png;base64,BBB"]
     messages = build_label_messages(urls)
     assert messages[0]["role"] == "system"
-    sent = [part["image_url"]["url"] for part in messages[1]["content"] if part["type"] == "image_url"]
+    sent = [
+        part["image_url"]["url"] for part in messages[1]["content"] if part["type"] == "image_url"
+    ]
     assert sent == urls
 
 

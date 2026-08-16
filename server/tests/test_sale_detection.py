@@ -58,7 +58,7 @@ async def _seed_active_item(user_id) -> Item:
             ebay_listing_id=f"11000{uuid.uuid4().hex[:8]}",
         )
         db.add(item)
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         db.add(
             EbayCredentials(
                 user_id=user_id,

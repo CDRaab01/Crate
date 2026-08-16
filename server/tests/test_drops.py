@@ -17,7 +17,7 @@ from app.pricing.drops import DropPlan, next_price, plan_drop
 from app.services import drop_scheduler, notify
 
 D = Decimal
-NOW = datetime.datetime(2026, 7, 25, 12, 0, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2026, 7, 25, 12, 0, tzinfo=datetime.UTC)
 
 
 def days_ago(n: int) -> datetime.datetime:
@@ -41,14 +41,14 @@ def test_next_price(current, step, floor, expected):
     assert next_price(current, step, floor) == expected
 
 
-BASE = dict(
-    chosen_price=D("20.00"),
-    quick_sale_price=D("12.00"),
-    step_percent=D("10"),
-    interval_days=14,
-    now=NOW,
-    floor_prompted=False,
-)
+BASE = {
+    "chosen_price": D("20.00"),
+    "quick_sale_price": D("12.00"),
+    "step_percent": D("10"),
+    "interval_days": 14,
+    "now": NOW,
+    "floor_prompted": False,
+}
 
 
 def test_plan_drop_due():

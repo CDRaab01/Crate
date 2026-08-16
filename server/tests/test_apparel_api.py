@@ -23,26 +23,26 @@ def photos_tmpdir(tmp_path, monkeypatch):
 
 
 def _shirt_draft(**overrides) -> IdentifyDraft:
-    base = dict(
-        title="Patagonia Organic Cotton Button-Up Navy Mens M",
-        brand="Patagonia",
-        model=None,
-        category_hint="mens casual shirts",
-        condition="good",
-        description="A navy organic-cotton button-up.",
-        weight_oz=9.0,
-        dims_in={"l": 12, "w": 10, "h": 2},
-        item_kind="clothing",
-        department="mens",
-        size="M",
-        size_type="regular",
-        color="Navy",
-        material="100% Organic Cotton",
-        style="Button-Up",
-        fit="regular",
-        sleeve_length="long",
-        confidence="high",
-    )
+    base = {
+        "title": "Patagonia Organic Cotton Button-Up Navy Mens M",
+        "brand": "Patagonia",
+        "model": None,
+        "category_hint": "mens casual shirts",
+        "condition": "good",
+        "description": "A navy organic-cotton button-up.",
+        "weight_oz": 9.0,
+        "dims_in": {"l": 12, "w": 10, "h": 2},
+        "item_kind": "clothing",
+        "department": "mens",
+        "size": "M",
+        "size_type": "regular",
+        "color": "Navy",
+        "material": "100% Organic Cotton",
+        "style": "Button-Up",
+        "fit": "regular",
+        "sleeve_length": "long",
+        "confidence": "high",
+    }
     base.update(overrides)
     return IdentifyDraft(**base)
 
