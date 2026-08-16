@@ -40,6 +40,7 @@ data class ItemDto(
     // with its tag unread.
     @SerialName("item_kind") val itemKind: String = "general",
     val size: String? = null,
+    @SerialName("size_standard") val sizeStandard: String? = null,
     @SerialName("size_type") val sizeType: String? = null,
     val department: String? = null,
     val color: String? = null,
@@ -187,6 +188,7 @@ data class ItemUpdateRequest(
     // 422 on an unknown value rather than degrading, so the UI offers fixed choices.
     @SerialName("item_kind") val itemKind: String? = null,
     val size: String? = null,
+    @SerialName("size_standard") val sizeStandard: String? = null,
     @SerialName("size_type") val sizeType: String? = null,
     val department: String? = null,
     val color: String? = null,
@@ -222,4 +224,23 @@ data class CategorySuggestionDto(
     @SerialName("category_id") val categoryId: String,
     val name: String,
     val path: String,
+)
+
+/** Permitted values for one eBay aspect, read live from eBay's taxonomy.
+ *
+ * `selectionOnly` matters over time: eBay is removing custom size values (full enforcement
+ * Aug 2026), so an aspect that is free text today can be closed tomorrow. */
+@Serializable
+data class AspectOptionsDto(
+    val name: String,
+    val required: Boolean,
+    @SerialName("selection_only") val selectionOnly: Boolean,
+    val values: List<String> = emptyList(),
+)
+
+@Serializable
+data class CategoryAspectsDto(
+    val aspects: List<AspectOptionsDto> = emptyList(),
+    /** The permitted Size the tag text unambiguously matches — a pre-selection, not a write. */
+    @SerialName("suggested_size") val suggestedSize: String? = null,
 )

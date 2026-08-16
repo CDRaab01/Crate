@@ -25,7 +25,8 @@ class ReviewGatingTest {
         categoryId: String? = "185101",
         brand: String? = "Lands End",
         color: String? = "White",
-        size: String? = "S",
+        size: String? = "M/L",
+        sizeStandard: String? = "S",
         sizeType: String? = "regular",
         department: String? = "mens",
     ) = ItemDto(
@@ -39,6 +40,7 @@ class ReviewGatingTest {
         brand = brand,
         color = color,
         size = size,
+        sizeStandard = sizeStandard,
         sizeType = sizeType,
         department = department,
         createdAt = "2026-08-16T14:00:00Z",
@@ -54,9 +56,22 @@ class ReviewGatingTest {
     fun `a complete general item is postable without the apparel specifics`() {
         assertTrue(
             readyToPost(
-                draft(itemKind = "general", size = null, sizeType = null, department = null)
+                draft(
+                    itemKind = "general",
+                    size = null,
+                    sizeStandard = null,
+                    sizeType = null,
+                    department = null,
+                )
             )
         )
+    }
+
+    @Test
+    fun `an unlistable tag reading does not block a garment that has an eBay size`() {
+        // "M/L" is a real tag reading eBay would block. Crate keeps it in the archive and
+        // lists under the standardized value the human picked, so this must stay postable.
+        assertTrue(readyToPost(draft(itemKind = "clothing", size = "M/L", sizeStandard = "M")))
     }
 
     @Test
@@ -64,7 +79,8 @@ class ReviewGatingTest {
         // Named individually rather than looped so a failure says which field regressed.
         assertFalse("brand", readyToPost(draft(itemKind = "clothing", brand = null)))
         assertFalse("color", readyToPost(draft(itemKind = "clothing", color = null)))
-        assertFalse("size", readyToPost(draft(itemKind = "clothing", size = null)))
+        // The tag text is archive data; eBay is sent sizeStandard, so THAT is what gates.
+        assertFalse("eBay size", readyToPost(draft(itemKind = "clothing", sizeStandard = null)))
         assertFalse("size type", readyToPost(draft(itemKind = "clothing", sizeType = null)))
         assertFalse("department", readyToPost(draft(itemKind = "clothing", department = null)))
     }
@@ -93,6 +109,7 @@ class ReviewGatingTest {
     fun `blank strings count as missing, not as answers`() {
         // The edit dialog writes "" to clear a field server-side, so empty must not read as set.
         assertFalse(readyToPost(draft(itemKind = "clothing", sizeType = "")))
+        assertFalse(readyToPost(draft(itemKind = "clothing", sizeStandard = "")))
         assertFalse(readyToPost(draft(categoryId = "")))
     }
 }

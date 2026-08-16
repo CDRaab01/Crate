@@ -30,6 +30,8 @@ from app.pricing import browse
 from app.pricing import service as pricing_service
 from app.pricing.comps import compute_prices
 from app.schemas.item import (
+    AspectOptionsOut,
+    CategoryAspectsOut,
     CategorySuggestionOut,
     CompOut,
     CompsOut,
@@ -352,6 +354,48 @@ async def category_suggestions(
     return [
         CategorySuggestionOut(category_id=s.category_id, name=s.name, path=s.path) for s in found
     ]
+
+
+@router.get("/{item_id}/category-aspects", response_model=CategoryAspectsOut)
+@limiter.limit("30/minute")
+async def category_aspects(
+    request: Request,
+    item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """What eBay will accept for this item's category — the review screen's Size dropdown.
+
+    Live rather than hardcoded: eBay's Size Standardization programme (full enforcement
+    August 2026) removes custom size values and blocks or holds listings carrying
+    non-standard ones, so the permitted set is a moving target whose failure mode is a
+    listing pulled from the site.
+    """
+    if not taxonomy.configured():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "eBay keyset not configured — category aspects are unavailable",
+        )
+    item = await _owned_item(db, user.id, item_id)
+    if not item.category_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Pick an eBay category first — aspects depend on it"
+        )
+    try:
+        found = await taxonomy.aspect_values(item.category_id)
+    except httpx.HTTPError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "eBay aspect lookup failed")
+
+    sizes = next((a.values for a in found if a.name == "Size"), [])
+    return CategoryAspectsOut(
+        aspects=[
+            AspectOptionsOut(
+                name=a.name, required=a.required, selection_only=a.selection_only, values=a.values
+            )
+            for a in found
+        ],
+        suggested_size=taxonomy.match_standard_size(item.size, sizes),
+    )
 
 
 @router.get("/{item_id}/sale", response_model=SaleOut)

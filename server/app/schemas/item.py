@@ -65,6 +65,7 @@ class ItemOut(BaseModel):
     status: str
     item_kind: str
     size: str | None
+    size_standard: str | None
     size_type: str | None
     department: str | None
     color: str | None
@@ -129,6 +130,7 @@ class ItemUpdate(BaseModel):
     # Apparel specifics. Free-text fields follow the same ""-clears convention as title etc.
     item_kind: str | None = None
     size: str | None = Field(default=None, max_length=32)
+    size_standard: str | None = Field(default=None, max_length=32)
     size_type: str | None = None
     department: str | None = None
     color: str | None = Field(default=None, max_length=48)
@@ -232,3 +234,25 @@ class CategorySuggestionOut(BaseModel):
     category_id: str
     name: str
     path: str
+
+
+class AspectOptionsOut(BaseModel):
+    """Permitted values for one eBay aspect, read live from eBay's taxonomy.
+
+    `selection_only` is the part that matters over time: eBay is removing custom size values
+    (full enforcement Aug 2026), so an aspect that is free text today can become closed
+    tomorrow. Reading the constraint rather than hardcoding it means that flip needs no
+    change here.
+    """
+
+    name: str
+    required: bool
+    selection_only: bool
+    values: list[str]
+
+
+class CategoryAspectsOut(BaseModel):
+    aspects: list[AspectOptionsOut]
+    # The permitted Size value this item's tag text unambiguously matches, if any — a
+    # pre-selection for the review dropdown, never a silent write.
+    suggested_size: str | None = None

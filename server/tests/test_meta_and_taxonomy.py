@@ -102,3 +102,80 @@ async def test_suggestions_skip_entries_without_an_id():
         found = await taxonomy.suggest_categories(Item(title="Polo"), client=http)
 
     assert [s.category_id for s in found] == ["185101"]
+
+
+@pytest.mark.parametrize(
+    "tag_text,expected",
+    [
+        ("S", "S"),  # already standard
+        (" m ", "M"),  # whitespace and case
+        ("Small", "S"),  # eBay's own documented normalization
+        ("EXTRA LARGE", "XL"),
+        ("extra-large", "XL"),
+        # Genuinely ambiguous readings must NOT be resolved — a wrong size ships the wrong
+        # garment, and the human is one dropdown away.
+        ("M/L", None),
+        ("EUR 30 / US 30 / CN 170/76A", None),
+        ("別大", None),
+        ("32x34", None),
+        (None, None),
+        ("", None),
+    ],
+)
+def test_match_standard_size_resolves_only_the_unambiguous(tag_text, expected):
+    permitted = ["XXS", "XS", "S", "M", "L", "XL", "XXL"]
+    assert taxonomy.match_standard_size(tag_text, permitted) == expected
+
+
+def test_match_standard_size_never_invents_a_value_the_category_forbids():
+    """'Small' means nothing if this category does not publish 'S'."""
+    assert taxonomy.match_standard_size("Small", ["Petite", "Regular"]) is None
+    assert taxonomy.match_standard_size("S", []) is None
+
+
+async def test_aspect_values_reads_the_live_constraint_not_a_hardcoded_list():
+    """eBay is tightening size values over time; the SELECTION_ONLY flag has to come from
+    them, or the day Size stops being free text we ship blocked listings."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "oauth2/token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "app-tok", "expires_in": 7200})
+        if "get_default_category_tree_id" in str(request.url):
+            return httpx.Response(200, json={"categoryTreeId": "0"})
+        return httpx.Response(
+            200,
+            json={
+                "aspects": [
+                    {
+                        "localizedAspectName": "Size",
+                        "aspectConstraint": {
+                            "aspectRequired": True,
+                            "aspectMode": "SELECTION_ONLY",
+                        },
+                        "aspectValues": [
+                            {"localizedValue": "S"},
+                            {"localizedValue": "M"},
+                            {"localizedValue": "L"},
+                        ],
+                    },
+                    {
+                        "localizedAspectName": "Pattern",
+                        "aspectConstraint": {
+                            "aspectRequired": False,
+                            "aspectMode": "FREE_TEXT",
+                        },
+                        "aspectValues": [],
+                    },
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        found = await taxonomy.aspect_values("185101", client=http)
+
+    size = next(a for a in found if a.name == "Size")
+    assert size.required is True
+    assert size.selection_only is True
+    assert size.values == ["S", "M", "L"]
+    pattern = next(a for a in found if a.name == "Pattern")
+    assert pattern.selection_only is False

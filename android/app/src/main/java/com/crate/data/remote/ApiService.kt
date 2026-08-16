@@ -46,6 +46,9 @@ interface ApiService {
     @GET("items/{id}/category-suggestions")
     suspend fun categorySuggestions(@Path("id") id: String): List<CategorySuggestionDto>
 
+    @GET("items/{id}/category-aspects")
+    suspend fun categoryAspects(@Path("id") id: String): CategoryAspectsDto
+
     @GET("items/{id}/comps")
     suspend fun comps(@Path("id") id: String): CompsDto
 

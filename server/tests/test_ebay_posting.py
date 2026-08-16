@@ -231,7 +231,8 @@ def test_apparel_aspects_map_our_vocabularies_to_ebays():
         item_kind="clothing",
         brand="Lands End",
         color="White",
-        size="S",
+        size="M/L",  # the tag as read — deliberately NOT what eBay receives
+        size_standard="S",
         size_type="big_tall",
         department="mens",
         material="Cotton",
@@ -240,6 +241,8 @@ def test_apparel_aspects_map_our_vocabularies_to_ebays():
         fit="regular",
     )
     aspects = sell.apparel_aspects(item)
+    # The listing carries the standardized value; the untranslatable tag text stays in the
+    # archive. Sending "M/L" is what eBay now blocks or holds the listing for.
     assert aspects["Size"] == ["S"]
     assert aspects["Size Type"] == ["Big & Tall"]  # not "big_tall"
     assert aspects["Department"] == ["Men"]  # not "mens"

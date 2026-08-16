@@ -99,7 +99,10 @@ _EBAY_FIT = {
 # errorId 25002 ("The item specific Size is missing"), after photos, inventory item and
 # offer have all already been created. Checking them up front turns that into an honest 422
 # naming the gap, and keeps the half-built listing from existing at all.
-APPAREL_REQUIRED_FIELDS = ("brand", "color", "size", "size_type", "department")
+APPAREL_REQUIRED_FIELDS = ("brand", "color", "size_standard", "size_type", "department")
+
+# "size standard" would read like a typo in an error a human has to act on.
+_MISSING_LABELS = {"size_standard": "eBay size"}
 
 
 def apparel_aspects(item: Item) -> dict[str, list[str]]:
@@ -114,7 +117,10 @@ def apparel_aspects(item: Item) -> dict[str, list[str]]:
         return {}
     mapped = {
         "Color": item.color,
-        "Size": item.size,
+        # eBay, not the tag: the Size Standardization programme blocks or holds
+        # listings carrying non-standard values (full enforcement Aug 2026), and real
+        # tags read "M/L" or "EUR 30 / US 30". item.size keeps the tag text.
+        "Size": item.size_standard,
         "Material": item.material,
         "Type": item.style,
         "Size Type": _EBAY_SIZE_TYPE.get(item.size_type or ""),
@@ -263,7 +269,7 @@ def _require_ready(item: Item) -> None:
         # read off the tag. Naming them here sends the human back to the garment while it
         # is still in reach, which is the whole premise of the archive-first workflow.
         missing.extend(
-            field.replace("_", " ")
+            _MISSING_LABELS.get(field, field.replace("_", " "))
             for field in APPAREL_REQUIRED_FIELDS
             if not getattr(item, field, None)
         )
