@@ -747,3 +747,37 @@ code/state"}` in the user's face each time.
 - **Verified:** 348 pytest green (14 new), ruff app gates clean; deploys green throughout.
   **Still pending:** the post-fix consent retry (the discriminating test), then the first
   real posting of the $15 polo draft; production keyset + account-deletion exemption.
+
+### Consent, round 2 (2026-08-16) — what ten attempts actually ruled out
+
+The `prompt=login` + base-scope fix did **not** fix it. Ten bare callbacks now, and the
+useful output of this round is a much shorter list of things it can still be.
+
+- **The fragment hypothesis is dead, and it needed code to kill.** A URL fragment never
+  leaves the browser, so "eBay sent no code" and "eBay sent it after a `#`" produce a
+  byte-identical bare GET — unfalsifiable from the server no matter how much logging you
+  add. PR #21 ships a few lines of JS on the bare page that bounce the whole landed URL
+  back as `?probe=…`. Verified live with a synthetic `#code=`; on the next real callback it
+  stayed silent, so **eBay is sending nothing at all** — no query, no fragment.
+- **The developer-portal RuName panel does not save.** Set the privacy policy URL, click
+  Save, reload: empty again. Same for both callback URLs. **Every** edit either of us made
+  to that panel across this whole saga was silently discarded — which means the audit's
+  Step 2 ("blank the accepted URL so eBay uses its own success page") was never actually
+  executed, and the fallback path built around it has never been available.
+- **Read an input's *value*, not its accessibility name.** I reported the accepted URL as
+  successfully blanked because the a11y tree showed the field's *placeholder*. It still held
+  the old URL. Cost a wrong all-clear and a wasted attempt. The authoritative read is the
+  DOM value.
+- **The consequence that reframes everything:** accepted URL and declined URL are set to the
+  *same* address, and can't be changed. So a decline and a broken accept are indistinguishable
+  in the logs — and always have been. The audit's "fact 5: it is not a decline" rested on the
+  declined URL having been cleared, which never happened. `consentGiven=false` appeared in a
+  consent URL captured mid-flow, which is consistent with consent simply not being granted.
+  **Ten data points, and not one of them can tell the two apart.**
+- Still true and re-verified: the RuName *is* OAuth-enabled (green check in the portal's own
+  table, not the form state).
+- **Next, and it wants a desktop:** eBay's portal token generator ("Get a User Token Here" →
+  OAuth → Sign in to Sandbox) issues a user token straight to the page with no redirect in
+  the flow at all — the supported path for an app serving one account, its owner's. Unknown
+  until tried: whether it surfaces a refresh token or only a 2-hour access token. If only the
+  latter, storing it still buys one posting run but not durability.
