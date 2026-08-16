@@ -197,7 +197,19 @@ def _content_type_of(path: str) -> str:
     return "image/jpeg"
 
 
+# Vision models answer "there are no condition notes" with a placeholder rather than by
+# omitting the field, and the placeholder then shipped verbatim: the first real listing ended
+# with the line "Condition: N/A", visible to buyers. Treat these as absent.
+_PLACEHOLDER_NOTES = {"n/a", "na", "none", "unknown", "null", "-", "--", "not applicable"}
+
+
+def _is_placeholder(value: str | None) -> bool:
+    return value is None or value.strip().strip(".").casefold() in _PLACEHOLDER_NOTES
+
+
 def _compose_description(description: str | None, condition_notes: str | None) -> str | None:
-    if description and condition_notes:
+    if _is_placeholder(condition_notes):
+        return description
+    if description:
         return f"{description}\n\nCondition: {condition_notes}"
-    return description or condition_notes
+    return condition_notes

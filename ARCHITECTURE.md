@@ -520,6 +520,18 @@ photographed, tagged, measured and boxed, so:
   exists) → publish → `ebay_listing_id` stored + lifecycle draft→active.
   POST `/items/{id}/delist` withdraws the offer (active→delisted).
   `update_offer_price()` exists for manual edits + the Phase 8 drop scheduler.
+- **A failed publish is resumable.** `publish_item` commits after eBay has created the
+  photos, inventory item and offer, *before* attempting the publish that can fail — the
+  router only commits on success, so without it a failed publish rolled back the offer id
+  and every photo's EPS url while eBay kept both. The next attempt then re-uploaded every
+  image and collided with errorId 25002. If it does collide, `_existing_offer_id` recovers
+  the id from the error's `offerId` parameter (not its message text, which eBay rewords) and
+  adopts it. This stranded offer 11447191010 on the first real post and needed a hand-written
+  UPDATE to recover.
+- **Placeholder condition notes never reach a listing.** Vision models answer "no condition
+  notes" with `"N/A"` rather than by omitting the field, so the first real listing shipped
+  with the line "Condition: N/A" visible to buyers. `scan_pipeline._is_placeholder` drops
+  the known placeholder set before composing the description.
 - **Review-stage dropdowns** (`routers/meta.py`, `services/ebay/taxonomy.py`, client
   `DropdownField`). The fields eBay refuses a listing without are chosen by a human, not
   guessed: Condition, eBay category, and — for clothing — Department and Size Type.

@@ -10,6 +10,7 @@ using the same OAuth user token (IAF header) — the returned EPS URLs go into t
 inventory item. This is the one legacy-XML call in the codebase; it's isolated here.
 """
 
+import logging
 import re
 
 import httpx
@@ -21,6 +22,8 @@ from app.config import settings
 from app.models.item import Item
 from app.services import photo_store
 from app.services.ebay import oauth
+
+logger = logging.getLogger(__name__)
 
 # Our condition enum → Inventory API condition enum.
 _CONDITION_MAP = {
@@ -223,6 +226,26 @@ async def upload_photos_to_eps(item: Item, token: str, client: httpx.AsyncClient
     return urls
 
 
+def _existing_offer_id(response: httpx.Response) -> str | None:
+    """The offerId eBay is complaining about, when it says one already exists.
+
+    errorId 25002 covers several "user error" conditions, so the offerId parameter is what
+    actually identifies this case — matching on the message text would break the first time
+    eBay rewords it.
+    """
+    try:
+        errors = response.json().get("errors", [])
+    except ValueError:
+        return None
+    for error in errors:
+        if error.get("errorId") != 25002:
+            continue
+        for parameter in error.get("parameters", []):
+            if parameter.get("name") == "offerId" and parameter.get("value"):
+                return str(parameter["value"])
+    return None
+
+
 def _require_ready(item: Item) -> None:
     missing = []
     if not item.title:
@@ -327,13 +350,34 @@ async def publish_item(
                     },
                 },
             )
-            if offer.status_code not in (200, 201):
-                raise HTTPException(
-                    status.HTTP_502_BAD_GATEWAY,
-                    f"eBay rejected the offer ({offer.status_code}): {offer.text[:300]}",
+            if offer.status_code in (200, 201):
+                offer_id = offer.json()["offerId"]
+            else:
+                # eBay may already hold an offer for this SKU from an earlier attempt whose
+                # publish failed. It reports that as a 400 carrying the existing offerId, so
+                # adopt it instead of dying: the alternative is a listing that can never be
+                # completed, because every retry collides with the same orphan.
+                offer_id = _existing_offer_id(offer)
+                if offer_id is None:
+                    raise HTTPException(
+                        status.HTTP_502_BAD_GATEWAY,
+                        f"eBay rejected the offer ({offer.status_code}): {offer.text[:300]}",
+                    )
+                logger.warning(
+                    "Adopted existing eBay offer %s for sku %s after a previous attempt "
+                    "failed before publish",
+                    offer_id,
+                    sku,
                 )
-            offer_id = offer.json()["offerId"]
             item.ebay_offer_id = offer_id
+
+        # Persist what eBay has ALREADY created before attempting the publish that may fail.
+        # publish_item's caller only commits on success, so without this a failed publish
+        # rolls back the offer id and every photo's EPS url while eBay keeps both — the next
+        # attempt then re-uploads all the images and collides with errorId 25002 on the
+        # offer. That is exactly how offer 11447191010 was stranded on the first real post,
+        # and it took a hand-written UPDATE to recover.
+        await db.commit()
 
         pub = await active.post(
             f"{oauth.api_host()}/sell/inventory/v1/offer/{offer_id}/publish",
