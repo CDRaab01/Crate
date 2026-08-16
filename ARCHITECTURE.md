@@ -546,6 +546,13 @@ both now fixed:
   app, and immune to however eBay feels about a `:8446` callback URL.
 - A bare callback now renders a **human HTML page** (what happened, what to do) instead of
   raw 422 JSON, and logs a warning naming the situation.
+- **The fragment probe.** Nine identical bare callbacks cannot distinguish "eBay sent no
+  code" from "eBay sent the code after a `#`" — a URL fragment never leaves the browser, so
+  the server sees the same bare GET either way. The bare page therefore ships a few lines of
+  JS that bounce the whole landed URL back as `?probe=…`, which lands in the access log and
+  the warning log. It fires only when a fragment exists, the bounce target carries none, and
+  `probe` short-circuits the branch that serves the script — loop-safe twice over. The value
+  is attacker-supplied text on an unauthenticated route: logged truncated, never stored.
 
 ## Pricing research (Phase 4, as built)
 
