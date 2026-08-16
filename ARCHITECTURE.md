@@ -520,6 +520,14 @@ photographed, tagged, measured and boxed, so:
   exists) → publish → `ebay_listing_id` stored + lifecycle draft→active.
   POST `/items/{id}/delist` withdraws the offer (active→delisted).
   `update_offer_price()` exists for manual edits + the Phase 8 drop scheduler.
+- **Apparel conditions are a separate vocabulary** (`ebay_condition()`). eBay's clothing
+  categories accept the "new" grades plus a *single* used grade (3000, "Pre-owned"); a
+  garment published as `USED_GOOD` is rejected with errorId 25059. So `like_new|good|fair|
+  poor` all collapse to `USED_EXCELLENT` for `item_kind == "clothing"`, and the description
+  carries the nuance. The collapse is one-directional by design: mapping `like_new` up to
+  `NEW_WITHOUT_TAGS` would preserve granularity but assert to a buyer that the garment was
+  never worn, which Crate will not claim on a used item's behalf. Tested in both directions,
+  including that an unknown condition falls back to a used grade rather than a new one.
 - Honest error surfaces: 503 keyset unconfigured / 409 not-connected or policies
   missing / 502 eBay rejected (with eBay's message excerpt).
 - Client: Settings screen (connection status + one-time consent via browser + sign

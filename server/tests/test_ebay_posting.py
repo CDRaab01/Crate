@@ -183,3 +183,42 @@ async def test_publish_503_when_unconfigured(auth_client, tmp_path, monkeypatch)
     item_id = await _seed_ready_item(auth_client.user_id, tmp_path)
     r = await auth_client.post(f"/items/{item_id}/post")
     assert r.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "kind,condition,expected",
+    [
+        # Apparel: eBay clothing categories accept only "new" grades + ONE used grade.
+        # Publishing USED_GOOD is rejected (errorId 25059) — found on the first real post.
+        ("clothing", "good", "USED_EXCELLENT"),
+        ("clothing", "fair", "USED_EXCELLENT"),
+        ("clothing", "poor", "USED_EXCELLENT"),
+        ("clothing", "new", "NEW_WITH_TAGS"),
+        # General merchandise keeps the full vocabulary.
+        ("general", "good", "USED_GOOD"),
+        ("general", "fair", "USED_ACCEPTABLE"),
+        ("general", "poor", "FOR_PARTS_OR_NOT_WORKING"),
+        ("general", "new", "NEW"),
+    ],
+)
+def test_ebay_condition_respects_apparel_vocabulary(kind, condition, expected):
+    item = Item(item_kind=kind, condition=condition)
+    assert sell.ebay_condition(item) == expected
+
+
+def test_used_apparel_is_never_promoted_to_a_new_grade():
+    """The collapse must be one-directional.
+
+    Mapping like_new up to NEW_WITHOUT_TAGS would preserve granularity, but "new without
+    tags" tells a buyer the garment was never worn — a factual claim about goods someone
+    pays for. No used grade may ever map to a NEW_* condition.
+    """
+    for condition in ("like_new", "good", "fair", "poor"):
+        assert not sell.ebay_condition(Item(item_kind="clothing", condition=condition)).startswith(
+            "NEW"
+        )
+
+
+def test_unknown_apparel_condition_falls_back_to_a_used_grade():
+    """An unrecognised condition must not silently become "new"."""
+    assert sell.ebay_condition(Item(item_kind="clothing", condition="wat")) == "USED_EXCELLENT"
