@@ -1,5 +1,6 @@
 """Seller OAuth: connect/callback state flow, Fernet-encrypted persistence, refresh."""
 
+import argparse
 import datetime
 import logging
 
@@ -313,3 +314,65 @@ async def test_probe_value_is_truncated_in_the_log(client, caplog):
         await client.get("/ebay/callback", params={"probe": "x" * 5000})
     assert "x" * 500 in caplog.text
     assert "x" * 1000 not in caplog.text
+
+
+def _load_script(name):
+    """Load a scripts/ module by path — they run inside the container, not as a package."""
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parents[2] / "scripts" / name
+    spec = importlib.util.spec_from_file_location(name.replace(".py", ""), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_store_token_without_refresh_expires_the_grant_with_the_access_token(
+    auth_client, monkeypatch
+):
+    """No refresh token => refresh_expires_at must NOT claim 18 months.
+
+    Recording a fake long refresh window would make /ebay/status advertise a durable
+    connection and send user_token() into a refresh call that cannot succeed; the honest
+    encoding is that the grant dies when the access token does.
+    """
+    store = _load_script("ebay_store_token.py")
+    args = argparse.Namespace(
+        access_token="access-only",
+        refresh_token=None,
+        expires_in=7200,
+        refresh_expires_in=47304000,
+        email=auth_client.email,
+    )
+    await store.run(args)
+
+    async with AsyncSessionLocal() as db:
+        creds = (
+            await db.execute(
+                select(EbayCredentials).where(EbayCredentials.user_id == auth_client.user_id)
+            )
+        ).scalar_one()
+        assert creds.expires_at == creds.refresh_expires_at
+        assert oauth.decrypt(creds.access_token_enc) == "access-only"
+
+
+async def test_store_token_with_refresh_records_the_long_window(auth_client):
+    store = _load_script("ebay_store_token.py")
+    args = argparse.Namespace(
+        access_token="access-tok",
+        refresh_token="refresh-tok",
+        expires_in=7200,
+        refresh_expires_in=47304000,
+        email=auth_client.email,
+    )
+    await store.run(args)
+
+    async with AsyncSessionLocal() as db:
+        creds = (
+            await db.execute(
+                select(EbayCredentials).where(EbayCredentials.user_id == auth_client.user_id)
+            )
+        ).scalar_one()
+        assert creds.refresh_expires_at > creds.expires_at
+        assert oauth.decrypt(creds.refresh_token_enc) == "refresh-tok"

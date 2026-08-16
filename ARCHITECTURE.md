@@ -546,6 +546,16 @@ both now fixed:
   app, and immune to however eBay feels about a `:8446` callback URL.
 - A bare callback now renders a **human HTML page** (what happened, what to do) instead of
   raw 422 JSON, and logs a warning naming the situation.
+- **`scripts/ebay_store_token.py` — the path with no redirect in it.** After eleven
+  attempts (consent granted each time, confirmed with the owner), the callback still
+  receives nothing: no query, no fragment. eBay's redirect builder is broken for this
+  RuName, so the code half of the flow is unreachable and no retry will change that. eBay's
+  developer portal issues a user token directly for single-account apps
+  (**Get a User Token Here → OAuth → Sign in to Sandbox**); this script stores what that
+  page prints, the way `exchange_code` would have. When the portal surfaces no refresh
+  token, `refresh_expires_at` is set equal to `expires_at` rather than a fictitious 18
+  months — so `/ebay/status` stays honest and `user_token()` raises its reconnect 409
+  instead of attempting a refresh that cannot succeed.
 - **The fragment probe.** Nine identical bare callbacks cannot distinguish "eBay sent no
   code" from "eBay sent the code after a `#`" — a URL fragment never leaves the browser, so
   the server sees the same bare GET either way. The bare page therefore ships a few lines of

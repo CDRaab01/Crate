@@ -61,4 +61,5 @@ async def auth_client(client):
 
     client.headers["Authorization"] = f"Bearer {create_access_token(str(user.id))}"
     client.user_id = user.id
+    client.email = user.email  # scripts/ resolve the user by email, not id
     return client
