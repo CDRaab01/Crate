@@ -282,3 +282,49 @@ def test_require_ready_names_every_missing_apparel_specific():
     assert "color" in exc.value.detail
     assert "size type" in exc.value.detail
     assert "brand" not in exc.value.detail  # present, must not be reported missing
+
+
+def test_existing_offer_id_is_recovered_from_ebays_25002():
+    """A publish that fails leaves eBay holding the offer. Every retry then collides with it,
+    so the id has to come back out of the error or the listing can never be completed."""
+    resp = httpx.Response(
+        400,
+        json={
+            "errors": [
+                {
+                    "errorId": 25002,
+                    "message": "A user error has occurred. Offer entity already exists.",
+                    "parameters": [{"name": "offerId", "value": "11447191010"}],
+                }
+            ]
+        },
+    )
+    assert sell._existing_offer_id(resp) == "11447191010"
+
+
+def test_a_different_25002_without_an_offer_id_is_not_adopted():
+    """errorId 25002 covers several 'user error' conditions — the offerId parameter is what
+    identifies this one. Matching on the message text would break when eBay rewords it."""
+    resp = httpx.Response(
+        400,
+        json={
+            "errors": [
+                {
+                    "errorId": 25002,
+                    "message": "A user error has occurred. The item specific Size is missing.",
+                    "parameters": [{"name": "0", "value": "Size is missing"}],
+                }
+            ]
+        },
+    )
+    assert sell._existing_offer_id(resp) is None
+
+
+def test_unrelated_errors_are_not_mistaken_for_an_existing_offer():
+    resp = httpx.Response(400, json={"errors": [{"errorId": 25059, "message": "Bad condition"}]})
+    assert sell._existing_offer_id(resp) is None
+
+
+def test_non_json_error_body_does_not_raise():
+    """eBay 5xx pages are HTML; the adoption check must not turn that into a parse error."""
+    assert sell._existing_offer_id(httpx.Response(502, text="<html>gateway</html>")) is None
