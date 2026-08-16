@@ -31,6 +31,34 @@ _CONDITION_MAP = {
     "poor": "FOR_PARTS_OR_NOT_WORKING",
 }
 
+# Apparel is not general merchandise: eBay's clothing categories accept only the "new"
+# grades plus a SINGLE used grade (3000, shown to buyers as "Pre-owned"). Publishing a
+# garment as USED_GOOD is rejected outright — errorId 25059, "Condition information 5000
+# ... is not a valid condition for category 185101", which is how this was found: on the
+# very first real post, after photo upload, inventory item and offer had all succeeded.
+#
+# The collapse is deliberate and one-directional. like_new/good/fair/poor all become
+# USED_EXCELLENT because that is the only used grade on offer, and the item description
+# carries the nuance. What must never happen is the tempting inverse — mapping like_new up
+# to NEW_WITHOUT_TAGS to preserve granularity. "New without tags" tells a buyer the garment
+# was never worn; that is a factual claim about goods someone pays for, and Crate does not
+# make it on a used item's behalf.
+_APPAREL_CONDITION_MAP = {
+    "new": "NEW_WITH_TAGS",
+    "like_new": "USED_EXCELLENT",
+    "good": "USED_EXCELLENT",
+    "fair": "USED_EXCELLENT",
+    "poor": "USED_EXCELLENT",
+}
+
+
+def ebay_condition(item: Item) -> str:
+    """The Inventory API condition for this item, respecting apparel's narrower vocabulary."""
+    if item.item_kind == "clothing":
+        return _APPAREL_CONDITION_MAP.get(item.condition, "USED_EXCELLENT")
+    return _CONDITION_MAP.get(item.condition, "USED_GOOD")
+
+
 _TRADING_HOSTS = {
     "production": "https://api.ebay.com/ws/api.dll",
     "sandbox": "https://api.sandbox.ebay.com/ws/api.dll",
@@ -193,7 +221,7 @@ async def publish_item(
                     "imageUrls": image_urls,
                     **({"aspects": aspects} if aspects else {}),
                 },
-                "condition": _CONDITION_MAP.get(item.condition, "USED_GOOD"),
+                "condition": ebay_condition(item),
                 "availability": {"shipToLocationAvailability": {"quantity": 1}},
             },
         )
