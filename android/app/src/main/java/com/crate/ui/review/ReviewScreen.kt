@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.crate.BuildConfig
+import com.crate.data.remote.CategoryAspectsDto
 import com.crate.data.remote.CategorySuggestionDto
 import com.crate.data.remote.ItemDto
 import com.crate.data.remote.ItemUpdateRequest
@@ -70,6 +71,7 @@ fun ReviewScreen(
     val refreshing by viewModel.refreshing.collectAsState()
     val vocabularies by viewModel.vocabularies.collectAsState()
     val categorySuggestions by viewModel.categorySuggestions.collectAsState()
+    val categoryAspects by viewModel.categoryAspects.collectAsState()
 
     OnResumeEffect { viewModel.refresh() }
 
@@ -129,8 +131,13 @@ fun ReviewScreen(
                                 onPost = { done -> viewModel.post(item.id, done) },
                                 vocabularies = vocabularies,
                                 categorySuggestions = categorySuggestions[item.id].orEmpty(),
+                                categoryAspects = categoryAspects[item.id],
                                 onLoadCategories = {
                                     viewModel.loadCategorySuggestions(item.id)
+                                },
+                                onLoadAspects = { viewModel.loadCategoryAspects(item.id) },
+                                onCategoryChanged = {
+                                    viewModel.invalidateCategoryAspects(item.id)
                                 },
                             )
                         }
@@ -150,7 +157,10 @@ internal fun DraftCard(
     onPost: ((String?) -> Unit) -> Unit,
     vocabularies: VocabulariesDto = VocabulariesDto(),
     categorySuggestions: List<CategorySuggestionDto> = emptyList(),
+    categoryAspects: CategoryAspectsDto? = null,
     onLoadCategories: () -> Unit = {},
+    onLoadAspects: () -> Unit = {},
+    onCategoryChanged: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
     var editingGarment by remember { mutableStateOf(false) }
@@ -352,7 +362,10 @@ internal fun DraftCard(
             item = item,
             vocabularies = vocabularies,
             categorySuggestions = categorySuggestions,
+            categoryAspects = categoryAspects,
             onLoadCategories = onLoadCategories,
+            onLoadAspects = onLoadAspects,
+            onCategoryChanged = onCategoryChanged,
             onSave = { update -> onSave(update) { ok -> if (ok) editing = false } },
             onCancel = { editing = false },
         )
@@ -386,7 +399,7 @@ internal fun readyToPost(item: ItemDto): Boolean {
     if (item.itemKind == "clothing") {
         return !item.brand.isNullOrBlank() &&
             !item.color.isNullOrBlank() &&
-            !item.size.isNullOrBlank() &&
+            !item.sizeStandard.isNullOrBlank() &&
             !item.sizeType.isNullOrBlank() &&
             !item.department.isNullOrBlank()
     }
@@ -422,7 +435,10 @@ private fun EditDialog(
     item: ItemDto,
     vocabularies: VocabulariesDto,
     categorySuggestions: List<CategorySuggestionDto>,
+    categoryAspects: CategoryAspectsDto?,
     onLoadCategories: () -> Unit,
+    onLoadAspects: () -> Unit,
+    onCategoryChanged: () -> Unit,
     onSave: (ItemUpdateRequest) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -432,6 +448,7 @@ private fun EditDialog(
     var condition by remember { mutableStateOf(item.condition) }
     var description by remember { mutableStateOf(item.description ?: "") }
     var categoryId by remember { mutableStateOf(item.categoryId) }
+    var sizeStandard by remember { mutableStateOf(item.sizeStandard) }
     var sizeType by remember { mutableStateOf(item.sizeType) }
     var department by remember { mutableStateOf(item.department) }
 
@@ -461,7 +478,10 @@ private fun EditDialog(
                         it.categoryId to listOf(it.path, it.name).filter(String::isNotBlank)
                             .joinToString(" > ")
                     },
-                    onSelect = { categoryId = it },
+                    onSelect = {
+                        categoryId = it
+                        onCategoryChanged()
+                    },
                     placeholder = "Tap to load eBay suggestions",
                     supporting = "Suggested by eBay from the title — required to post",
                     onOpen = onLoadCategories,
@@ -473,6 +493,27 @@ private fun EditDialog(
                         options = vocabularies.departments.map { it.value to it.label },
                         onSelect = { department = it },
                         supporting = "Required by eBay for clothing",
+                    )
+                    // eBay's Size Standardization: full enforcement August 2026 blocks or
+                    // holds listings carrying non-standard sizes, and custom values are gone
+                    // from new listings. So the value eBay receives is picked from eBay's own
+                    // published list for this category — item.size keeps the tag text, which
+                    // is the part no later automation can recover.
+                    DropdownField(
+                        label = "eBay size",
+                        value = sizeStandard ?: categoryAspects?.suggestedSize,
+                        options = (categoryAspects?.aspects.orEmpty()
+                            .firstOrNull { it.name == "Size" }?.values.orEmpty())
+                            .map { it to it },
+                        onSelect = { sizeStandard = it },
+                        placeholder = if (item.categoryId == null) {
+                            "Pick an eBay category first"
+                        } else {
+                            "Tap to load eBay's sizes"
+                        },
+                        supporting = item.size?.let { "Tag reads \"$it\"" }
+                            ?: "Required by eBay for clothing",
+                        onOpen = onLoadAspects,
                     )
                     DropdownField(
                         label = "Size type",
@@ -505,6 +546,7 @@ private fun EditDialog(
                         condition = condition,
                         description = description,
                         categoryId = categoryId,
+                        sizeStandard = sizeStandard ?: categoryAspects?.suggestedSize,
                         sizeType = sizeType,
                         department = department,
                     )

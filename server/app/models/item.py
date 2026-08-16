@@ -45,6 +45,10 @@ class Item(Base):
     # controlled value is genuinely knowable (see apparel/attributes.py).
     item_kind: Mapped[str] = mapped_column(String(16), default="general", server_default="general")
     size: Mapped[str | None] = mapped_column(String(32), nullable=True)  # tag text: "M", "32x34"
+    # What eBay is told. Separate from `size` because eBay enforces a standardized
+    # vocabulary (Aug 2026) while the tag says whatever it says — "M/L", "別大",
+    # "EUR 30 / US 30". Losing either one loses something that cannot be recovered.
+    size_standard: Mapped[str | None] = mapped_column(String(32), nullable=True)
     size_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # SIZE_TYPES
     department: Mapped[str | None] = mapped_column(String(16), nullable=True)  # DEPARTMENTS
     color: Mapped[str | None] = mapped_column(String(48), nullable=True)

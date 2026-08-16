@@ -106,3 +106,100 @@ async def suggest_categories(
     finally:
         if owns_client:
             await active.aclose()
+
+
+@dataclass(frozen=True)
+class AspectValues:
+    """The permitted values for one eBay item aspect in a given category."""
+
+    name: str
+    required: bool
+    selection_only: bool  # True ⇒ eBay rejects anything not in `values`
+    values: list[str]
+
+
+async def aspect_values(
+    category_id: str, client: httpx.AsyncClient | None = None
+) -> list[AspectValues]:
+    """What eBay will accept for each aspect of `category_id`.
+
+    Read live rather than hardcoded because eBay is actively tightening it: the Size
+    Standardization programme (full enforcement August 2026) removes custom size values and
+    blocks or holds listings that carry non-standard ones. A vocabulary copied into this repo
+    would be a snapshot of a moving target — and the failure mode is a listing pulled from
+    the site, not a test going red.
+    """
+    owns_client = client is None
+    active = client or httpx.AsyncClient(timeout=settings.external_timeout_seconds)
+    try:
+        token = await browse._app_token(active)
+        host = _TAXONOMY_HOSTS.get(settings.ebay_environment, _TAXONOMY_HOSTS["sandbox"])
+        headers = {"Authorization": f"Bearer {token}"}
+
+        tree = await active.get(
+            f"{host}/commerce/taxonomy/v1/get_default_category_tree_id",
+            headers=headers,
+            params={"marketplace_id": settings.ebay_marketplace_id},
+        )
+        tree.raise_for_status()
+        tree_id = tree.json().get("categoryTreeId", "0")
+
+        resp = await active.get(
+            f"{host}/commerce/taxonomy/v1/category_tree/{tree_id}/get_item_aspects_for_category",
+            headers=headers,
+            params={"category_id": category_id},
+        )
+        resp.raise_for_status()
+
+        found = []
+        for aspect in resp.json().get("aspects", []):
+            constraint = aspect.get("aspectConstraint", {})
+            found.append(
+                AspectValues(
+                    name=aspect.get("localizedAspectName", ""),
+                    required=bool(constraint.get("aspectRequired")),
+                    selection_only=constraint.get("aspectMode") == "SELECTION_ONLY",
+                    values=[
+                        v["localizedValue"]
+                        for v in aspect.get("aspectValues", [])
+                        if v.get("localizedValue")
+                    ],
+                )
+            )
+        return found
+    finally:
+        if owns_client:
+            await active.aclose()
+
+
+def match_standard_size(tag_text: str | None, permitted: list[str]) -> str | None:
+    """The permitted value a tag reading unambiguously IS, or None to ask the human.
+
+    Deliberately narrow. It resolves case and spacing ("small" → "S", " M " → "M") and the
+    long forms eBay itself normalizes, and stops there. A tag reading "M/L" is genuinely two
+    sizes, "EUR 30 / US 30 / CN 170/76A" is three systems, and "別大" is not in any Latin
+    vocabulary — guessing at those is how a buyer receives the wrong garment, so they come
+    back as None and become a dropdown the human answers.
+    """
+    if not tag_text or not permitted:
+        return None
+    cleaned = tag_text.strip()
+    by_fold = {value.casefold(): value for value in permitted}
+
+    if cleaned.casefold() in by_fold:
+        return by_fold[cleaned.casefold()]
+
+    # eBay's own documented normalization: the spelled-out forms map to the letter codes.
+    long_forms = {
+        "extra extra small": "XXS",
+        "extra small": "XS",
+        "small": "S",
+        "medium": "M",
+        "large": "L",
+        "extra large": "XL",
+        "extra extra large": "XXL",
+    }
+    candidate = long_forms.get(cleaned.casefold().replace("-", " "))
+    if candidate and candidate.casefold() in by_fold:
+        return by_fold[candidate.casefold()]
+    return None

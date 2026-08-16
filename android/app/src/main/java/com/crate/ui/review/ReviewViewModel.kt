@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crate.data.remote.ApiService
 import com.crate.data.remote.ItemDto
+import com.crate.data.remote.CategoryAspectsDto
 import com.crate.data.remote.CategorySuggestionDto
 import com.crate.data.remote.ItemUpdateRequest
 import com.crate.data.remote.VocabulariesDto
@@ -44,6 +45,13 @@ class ReviewViewModel @Inject constructor(
         _categorySuggestions
 
     private val inFlightCategories = mutableSetOf<String>()
+
+    /** eBay's permitted aspect values per item — the Size dropdown. Keyed by item id and
+     * fetched on menu-open, like the category suggestions. */
+    private val _categoryAspects = MutableStateFlow<Map<String, CategoryAspectsDto>>(emptyMap())
+    val categoryAspects: StateFlow<Map<String, CategoryAspectsDto>> = _categoryAspects
+
+    private val inFlightAspects = mutableSetOf<String>()
 
     init {
         refresh()
@@ -111,6 +119,28 @@ class ReviewViewModel @Inject constructor(
                 polling = false
             }
         }
+    }
+
+    /** Load eBay's permitted values for this item's category. Requires a category to be set
+     * (the server 409s otherwise), so the Size dropdown fills in only after one is chosen. */
+    fun loadCategoryAspects(id: String) {
+        if (id in inFlightAspects || _categoryAspects.value.containsKey(id)) return
+        inFlightAspects += id
+        viewModelScope.launch {
+            try {
+                _categoryAspects.value = _categoryAspects.value + (id to api.categoryAspects(id))
+            } catch (_: Exception) {
+                // Absent key => opening the menu again retries. A 409 here just means no
+                // category picked yet, which the dropdown's placeholder already explains.
+            } finally {
+                inFlightAspects -= id
+            }
+        }
+    }
+
+    /** Category changed => the permitted aspect values changed with it. */
+    fun invalidateCategoryAspects(id: String) {
+        _categoryAspects.value = _categoryAspects.value - id
     }
 
     fun saveEdits(id: String, update: ItemUpdateRequest, onDone: (Boolean) -> Unit) {

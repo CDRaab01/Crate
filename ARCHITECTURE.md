@@ -532,6 +532,18 @@ photographed, tagged, measured and boxed, so:
   notes" with `"N/A"` rather than by omitting the field, so the first real listing shipped
   with the line "Condition: N/A" visible to buyers. `scan_pipeline._is_placeholder` drops
   the known placeholder set before composing the description.
+- **Size: archive text and listing value are different columns** (`items.size_standard`,
+  migration 0005). eBay's Size Standardization programme reached full enforcement in August
+  2026 — non-standard or missing sizes get the listing blocked or put on hold, and custom
+  values are gone from new listings. `attributes.py` deliberately keeps `size` free text
+  because real tags read "M/L", "別大", "EUR 30 / US 30" and that reading is unrecoverable
+  once the garment is boxed; that reasoning still holds for the archive and no longer holds
+  for the listing. So `size` stays as read, `size_standard` is what eBay receives, and it is
+  chosen at review from **eBay's own published values** for the category
+  (`taxonomy.aspect_values`, read live — the permitted set is a moving target whose failure
+  mode is a listing pulled from the site, not a red test). `match_standard_size` pre-selects
+  only unambiguous readings (case, spacing, and the spelled-out forms eBay itself
+  normalizes); anything genuinely ambiguous returns None and becomes a human choice.
 - **Review-stage dropdowns** (`routers/meta.py`, `services/ebay/taxonomy.py`, client
   `DropdownField`). The fields eBay refuses a listing without are chosen by a human, not
   guessed: Condition, eBay category, and — for clothing — Department and Size Type.
